@@ -12,7 +12,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
   const location = useLocation();
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <p>Memverifikasi autentikasi...</p>
+      </div>
+    );
   }
 
   if (!user) {
@@ -20,7 +25,16 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
   }
 
   if (requiredRole && !requiredRole.includes(user.role)) {
-    return <div>Access denied</div>;
+    return (
+      <div className="access-denied">
+        <div className="access-denied-content">
+          <h2>Akses Ditolak</h2>
+          <p>Anda tidak memiliki izin untuk mengakses halaman ini.</p>
+          <p>Role yang diperlukan: {requiredRole.join(', ')}</p>
+          <p>Role Anda: {user.role}</p>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;
