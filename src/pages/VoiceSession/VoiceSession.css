@@ -141,7 +141,6 @@
 }
 
 /* Voice Buttons */
-/* Voice Buttons - PERBAIKAN UNTUK LINGKARAN SEMPURNA */
 .voice-button {
   position: absolute;
   border-radius: 50%;
@@ -153,12 +152,10 @@
   box-shadow: var(--shadow-lg);
   border: 4px solid transparent;
   z-index: 10;
-  /* HAPUS width dan height dari sini, akan dikontrol oleh aspect-ratio */
 }
 
-/* TAMBAHKAN class baru untuk memastikan lingkaran sempurna */
 .voice-button.circular {
-  aspect-ratio: 1 / 1; /* Memastikan rasio 1:1 untuk lingkaran sempurna */
+  aspect-ratio: 1 / 1;
   min-width: 0;
   min-height: 0;
 }
