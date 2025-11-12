@@ -93,9 +93,9 @@ const VoiceSession: React.FC = () => {
       audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`, // Fallback URL
       centerX: position.x,
       centerY: position.y,
-      radius: 10, // Default radius
+      radius: 10,
       color: getColorByCategory(phrase.category),
-      dwellTime: 2000 // Default dwell time
+      dwellTime: 2000
     };
   });
 
@@ -468,12 +468,11 @@ const VoiceSession: React.FC = () => {
           {voiceButtons.map((button) => (
             <div
               key={button.id}
-              className={`voice-button ${activeButton === button.id ? 'active' : ''}`}
+              className={`voice-button circular ${activeButton === button.id ? 'active' : ''}`}
               style={{
                 left: `${button.centerX}%`,
                 top: `${button.centerY}%`,
                 width: `${button.radius * 2}%`,
-                height: `${button.radius * 2}%`,
                 backgroundColor: button.color,
                 transform: 'translate(-50%, -50%)'
               }}
