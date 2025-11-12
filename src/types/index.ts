@@ -19,6 +19,12 @@ export interface Phrase {
   category: string;
   usageCount: number;
   createdAt: Date;
+  audioUrl?: string;
+}
+
+export interface AppStorage {
+  phrases: Phrase[];
+  lastUsedCategories: string[];
 }
 
 export interface Session {

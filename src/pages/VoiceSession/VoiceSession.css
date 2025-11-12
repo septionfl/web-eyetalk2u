@@ -141,6 +141,7 @@
 }
 
 /* Voice Buttons */
+/* Voice Buttons - PERBAIKAN UNTUK LINGKARAN SEMPURNA */
 .voice-button {
   position: absolute;
   border-radius: 50%;
@@ -148,10 +149,33 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: var(--shadow-lg);
   border: 4px solid transparent;
   z-index: 10;
+  /* HAPUS width dan height dari sini, akan dikontrol oleh aspect-ratio */
+}
+
+/* TAMBAHKAN class baru untuk memastikan lingkaran sempurna */
+.voice-button.circular {
+  aspect-ratio: 1 / 1; /* Memastikan rasio 1:1 untuk lingkaran sempurna */
+  min-width: 0;
+  min-height: 0;
+}
+
+.button-label {
+  color: white;
+  font-weight: 600;
+  font-size: var(--font-size-lg);
+  text-align: center;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 11;
+  padding: var(--space-2);
+  /* Tambahkan properti untuk text wrapping */
+  word-wrap: break-word;
+  max-width: 90%;
+  line-height: 1.2;
 }
 
 .voice-button:hover {
@@ -906,4 +930,283 @@
 
 .gaze-point.active-tracking {
   animation: gaze-active 2s infinite;
+}
+
+/* Full Screen Styles */
+.voice-session.fullscreen {
+  padding: 0;
+  background: black;
+}
+
+.voice-session.fullscreen .session-content {
+  grid-template-columns: 1fr;
+  height: 100vh;
+  gap: 0;
+}
+
+.voice-session.fullscreen .gaze-container {
+  border-radius: 0;
+  border: none;
+  aspect-ratio: unset;
+  height: 100vh;
+}
+
+/* Full Screen Controls */
+.fullscreen-controls {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  gap: 10px;
+  z-index: 25;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px;
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+}
+
+/* Settings Panel */
+.settings-panel {
+  background: white;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-6);
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Add Button Form */
+.add-button-form {
+  background: var(--gray-50);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 2px dashed var(--gray-300);
+}
+
+.add-button-form h4 {
+  margin-bottom: var(--space-3);
+  color: var(--gray-700);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.form-row label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--gray-600);
+}
+
+.form-row input[type="range"] {
+  width: 100%;
+}
+
+.form-row input[type="text"] {
+  padding: var(--space-2);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  font-size: var(--font-size-sm);
+}
+
+.form-row input[type="color"] {
+  width: 100%;
+  height: 40px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* Buttons List */
+.buttons-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.button-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-2);
+  transition: var(--transition);
+}
+
+.button-item:hover {
+  background: var(--gray-50);
+}
+
+.button-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--gray-300);
+  flex-shrink: 0;
+}
+
+.button-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.button-info strong {
+  color: var(--gray-900);
+  font-size: var(--font-size-sm);
+}
+
+.button-info span {
+  color: var(--gray-500);
+  font-size: var(--font-size-xs);
+}
+
+/* Management Controls */
+.management-controls {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--gray-200);
+}
+
+/* Enhanced Voice Buttons for Full Screen */
+.voice-session.fullscreen .voice-button {
+  border-width: 3px;
+}
+
+.voice-session.fullscreen .button-label {
+  font-size: calc(var(--font-size-lg) * 1.5);
+  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.7);
+}
+
+.voice-session.fullscreen .gaze-point {
+  width: 30px;
+  height: 30px;
+  border-width: 3px;
+}
+
+.voice-session.fullscreen .gaze-point::before {
+  width: 10px;
+  height: 10px;
+}
+
+/* Input Mode Indicator in Full Screen */
+.voice-session.fullscreen .input-mode-indicator {
+  top: 20px;
+  left: 20px;
+  font-size: 14px;
+  padding: 10px 15px;
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 50vh;
+  gap: var(--space-4);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--gray-200);
+  border-left: 4px solid var(--primary-500);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Responsive Design for Settings */
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .management-controls {
+    flex-direction: column;
+  }
+  
+  .button-item {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+  
+  .button-info {
+    width: 100%;
+  }
+}
+
+/* Animation for new button addition */
+@keyframes button-appear {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.voice-button.new-button {
+  animation: button-appear 0.5s ease-out;
+}
+
+/* Enhanced visual feedback for full screen */
+.voice-session.fullscreen .voice-button.active {
+  animation: fullscreen-button-pulse 1s ease-in-out infinite;
+}
+
+@keyframes fullscreen-button-pulse {
+  0%, 100% { 
+    box-shadow: 
+      0 0 0 0 rgba(255, 255, 255, 0.8),
+      0 15px 40px rgba(0, 0, 0, 0.4);
+  }
+  50% { 
+    box-shadow: 
+      0 0 0 25px rgba(255, 255, 255, 0),
+      0 20px 60px rgba(0, 0, 0, 0.6);
+  }
+}
+
+@media (max-width: 768px) {
+  .button-label {
+    font-size: var(--font-size-sm);
+    padding: var(--space-1);
+  }
+}
+
+@media (max-width: 480px) {
+  .button-label {
+    font-size: var(--font-size-xs);
+    line-height: 1.1;
+  }
+}
+
+.voice-button.circular {
+  height: 0;
+  padding-bottom: 100%; /* Membuat tinggi sama dengan lebar */
+}
+
+@supports (aspect-ratio: 1) {
+  .voice-button.circular {
+    height: auto;
+    padding-bottom: 0;
+    aspect-ratio: 1 / 1;
+  }
 }

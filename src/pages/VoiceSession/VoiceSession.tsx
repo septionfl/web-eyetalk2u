@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Square, RotateCcw, Eye, Volume2, Home, RefreshCw, Camera } from 'lucide-react';
+import { 
+  Play, Square, RotateCcw, Eye, Volume2, Home, 
+  Maximize2, Minimize2, Settings, Plus, Trash2,
+  Save, Upload, Download
+} from 'lucide-react';
 import { useWebSocket } from '../../hooks/useWebSocket';
-import { eyeTrackingApi } from '../../services/eyeTrackingApi';
+import { usePhrasesStorage } from '../../hooks/useLocalStorage';
 import './VoiceSession.css';
 
 interface GazePoint {
@@ -29,80 +33,148 @@ const VoiceSession: React.FC = () => {
   const [activeButton, setActiveButton] = useState<string | null>(null);
   const [dwellProgress, setDwellProgress] = useState<number>(0);
   const [lastPlayedAudio, setLastPlayedAudio] = useState<string | null>(null);
-  const [isCalibrating, setIsCalibrating] = useState(false);
-  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [useMouseSimulation, setUseMouseSimulation] = useState(true);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [newButtonConfig, setNewButtonConfig] = useState<Partial<VoiceButton>>({
+    label: '',
+    centerX: 50,
+    centerY: 50,
+    radius: 10,
+    color: '#3B82F6',
+    dwellTime: 2000
+  });
   
   const dwellTimerRef = useRef<NodeJS.Timeout | null>(null);
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const gazeContainerRef = useRef<HTMLDivElement>(null);
   
-  const { gazeData, isConnected, error: wsError, sendMessage } = useWebSocket();
+  const { lastMessage, sendMessage, isConnected } = useWebSocket();
+  const { 
+    phrases, 
+    isLoading, 
+    addPhrase, 
+    updatePhrase, 
+    deletePhrase, 
+    resetPhrases,
+    exportPhrases,
+    incrementUsage 
+  } = usePhrasesStorage();
 
-  // Voice buttons configuration
-  const voiceButtons: VoiceButton[] = [
-    {
-      id: 'thirsty',
-      label: 'Saya Haus',
-      audioUrl: '/audio/saya_haus.wav',
-      centerX: 25,
-      centerY: 30,
-      radius: 12,
-      color: '#3B82F6',
-      dwellTime: 2000
-    },
-    {
-      id: 'hungry',
-      label: 'Saya Lapar',
-      audioUrl: '/audio/saya_lapar.wav',
-      centerX: 75,
-      centerY: 30,
-      radius: 12,
-      color: '#10B981',
-      dwellTime: 2000
-    },
-    {
-      id: 'help',
-      label: 'Tolong',
-      audioUrl: '/audio/tolong.wav',
-      centerX: 25,
-      centerY: 70,
-      radius: 10,
-      color: '#EF4444',
-      dwellTime: 1500
-    },
-    {
-      id: 'pain',
-      label: 'Sakit',
-      audioUrl: '/audio/sakit.wav',
-      centerX: 75,
-      centerY: 70,
-      radius: 10,
-      color: '#F59E0B',
-      dwellTime: 1500
-    },
-    {
-      id: 'bathroom',
-      label: 'Kamar Mandi',
-      audioUrl: '/audio/kamar_mandi.wav',
-      centerX: 50,
-      centerY: 50,
-      radius: 10,
-      color: '#8B5CF6',
-      dwellTime: 1800
-    }
-  ];
+  // Helper function untuk menentukan warna berdasarkan kategori
+  const getColorByCategory = (category: string): string => {
+    const colorMap: { [key: string]: string } = {
+      'kebutuhan_dasar': '#3B82F6', // Blue
+      'medis': '#EF4444',           // Red
+      'kenyamanan': '#10B981',      // Green
+      'bantuan': '#F59E0B',         // Yellow
+      'emergency': '#DC2626'        // Dark Red
+    };
+    
+    return colorMap[category] || '#6B7280'; // Gray default
+  };
 
-  // Handle incoming gaze data from WebSocket
+  // Konversi phrases menjadi voiceButtons
+  const voiceButtons: VoiceButton[] = phrases.map((phrase, index) => {
+    // Position buttons in a grid
+    const positions = [
+      { x: 25, y: 30 }, // Top-left
+      { x: 75, y: 30 }, // Top-right
+      { x: 25, y: 70 }, // Bottom-left
+      { x: 75, y: 70 }  // Bottom-right
+    ];
+    
+    const position = positions[index % positions.length];
+    
+    return {
+      id: phrase.id,
+      label: phrase.text,
+      audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`, // Fallback URL
+      centerX: position.x,
+      centerY: position.y,
+      radius: 10, // Default radius
+      color: getColorByCategory(phrase.category),
+      dwellTime: 2000 // Default dwell time
+    };
+  });
+
+  // Handle WebSocket messages
   useEffect(() => {
-    if (gazeData && isSessionActive) {
-      setGazePoint({ 
-        x: gazeData.x, 
-        y: gazeData.y, 
-        timestamp: gazeData.timestamp 
-      });
-      checkGazeInButtons(gazeData.x, gazeData.y);
+    if (lastMessage && isSessionActive) {
+      console.log('WebSocket message received:', lastMessage);
+      
+      switch (lastMessage.type) {
+        case 'gaze_data':
+          const { x, y, timestamp } = lastMessage.data;
+          const normalizedX = Math.max(0, Math.min(100, x));
+          const normalizedY = Math.max(0, Math.min(100, y));
+          
+          setGazePoint({ x: normalizedX, y: normalizedY, timestamp });
+          checkGazeInButtons(normalizedX, normalizedY);
+          setUseMouseSimulation(false);
+          break;
+          
+        case 'calibration_complete':
+          console.log('Calibration completed');
+          break;
+          
+        default:
+          break;
+      }
     }
-  }, [gazeData, isSessionActive]);
+  }, [lastMessage, isSessionActive]);
+
+  // Mouse simulation for development
+  useEffect(() => {
+    if (!isSessionActive || !useMouseSimulation) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const container = document.getElementById('gaze-container');
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      
+      setGazePoint({ x, y, timestamp: Date.now() });
+      checkGazeInButtons(x, y);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [isSessionActive, useMouseSimulation]);
+
+  // Full screen handling
+  useEffect(() => {
+    const handleFullScreenChange = () => {
+      setIsFullScreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullScreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullScreenChange);
+    };
+  }, []);
+
+  const toggleFullScreen = useCallback(() => {
+    if (!gazeContainerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      gazeContainerRef.current.requestFullscreen().then(() => {
+        setIsFullScreen(true);
+      }).catch(err => {
+        console.error('Error enabling full-screen:', err);
+      });
+    } else {
+      document.exitFullscreen().then(() => {
+        setIsFullScreen(false);
+      });
+    }
+  }, []);
 
   // Clear all timers
   const clearAllTimers = useCallback(() => {
@@ -133,7 +205,7 @@ const VoiceSession: React.FC = () => {
 
     if (foundButton) {
       if (activeButton === foundButton.id) {
-        return; // Timer already running
+        return;
       } else {
         setActiveButton(foundButton.id);
         startDwellTimer(foundButton);
@@ -174,7 +246,9 @@ const VoiceSession: React.FC = () => {
     console.log(`Triggering button: ${button.label}`);
     setLastPlayedAudio(button.label);
     
-    // Play audio
+    // Increment usage count
+    incrementUsage(button.id);
+    
     if (audioRef.current) {
       audioRef.current.src = button.audioUrl;
       audioRef.current.play().catch(error => {
@@ -185,16 +259,16 @@ const VoiceSession: React.FC = () => {
       speakText(button.label);
     }
 
-    // Send trigger event via WebSocket (optional)
     sendMessage({
       type: 'button_triggered',
       data: {
         buttonId: button.id,
         buttonLabel: button.label,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        gazePoint: gazePoint
       }
     });
-  }, [sendMessage]);
+  }, [sendMessage, gazePoint, incrementUsage]);
 
   // Text-to-speech fallback
   const speakText = useCallback((text: string) => {
@@ -202,72 +276,93 @@ const VoiceSession: React.FC = () => {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'id-ID';
       utterance.rate = 0.8;
-      utterance.pitch = 1;
       speechSynthesis.speak(utterance);
     }
   }, []);
 
   // Session control functions
-  const startSession = async () => {
-    try {
-      setSessionError(null);
-      await eyeTrackingApi.startSession();
-      setIsSessionActive(true);
-      console.log('Eye tracking session started');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to start session';
-      setSessionError(errorMessage);
-      console.error('Failed to start session:', error);
+  const startSession = () => {
+    setIsSessionActive(true);
+    setUseMouseSimulation(true);
+    
+    sendMessage({ 
+      type: 'start_voice_session',
+      data: { timestamp: Date.now() }
+    });
+  };
+
+  const stopSession = () => {
+    setIsSessionActive(false);
+    clearAllTimers();
+    setActiveButton(null);
+    setDwellProgress(0);
+    setGazePoint(null);
+    
+    sendMessage({ 
+      type: 'stop_voice_session',
+      data: { timestamp: Date.now() }
+    });
+  };
+
+  const startCalibration = () => {
+    sendMessage({ 
+      type: 'start_calibration',
+      data: { timestamp: Date.now() }
+    });
+  };
+
+  const toggleInputMode = () => {
+    setUseMouseSimulation(!useMouseSimulation);
+    if (!useMouseSimulation) {
+      sendMessage({ 
+        type: 'request_gaze_data',
+        data: { timestamp: Date.now() }
+      });
     }
   };
 
-  const stopSession = async () => {
-    try {
-      await eyeTrackingApi.stopSession();
-      setIsSessionActive(false);
-      clearAllTimers();
-      setActiveButton(null);
-      setDwellProgress(0);
-      setGazePoint(null);
-      console.log('Eye tracking session stopped');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to stop session';
-      setSessionError(errorMessage);
-      console.error('Failed to stop session:', error);
+  // Button management functions - now using phrases
+  const handleAddButton = () => {
+    if (!newButtonConfig.label?.trim()) {
+      alert('Label is required');
+      return;
     }
+
+    addPhrase({
+      text: newButtonConfig.label,
+      category: 'kebutuhan_dasar', // Default category
+      usageCount: 0,
+      lastUsed: null,
+      audioUrl: `/audio/${newButtonConfig.label.toLowerCase().replace(/\s+/g, '_')}.wav`
+    });
+
+    setNewButtonConfig({
+      label: '',
+      centerX: 50,
+      centerY: 50,
+      radius: 10,
+      color: '#3B82F6',
+      dwellTime: 2000
+    });
   };
 
-  const startCalibration = async () => {
-    try {
-      setIsCalibrating(true);
-      setSessionError(null);
-      await eyeTrackingApi.calibrate();
-      console.log('Calibration started');
-      
-      // Calibration typically takes a few seconds
-      setTimeout(() => {
-        setIsCalibrating(false);
-        console.log('Calibration likely completed');
-      }, 5000);
-      
-    } catch (error) {
-      setIsCalibrating(false);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to start calibration';
-      setSessionError(errorMessage);
-      console.error('Failed to start calibration:', error);
-    }
+  const handleDeleteButton = (buttonId: string) => {
+    deletePhrase(buttonId);
   };
 
-  const resetHaar = async () => {
-    try {
-      setSessionError(null);
-      await eyeTrackingApi.resetHaar();
-      console.log('Haar cascade reset');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to reset Haar cascade';
-      setSessionError(errorMessage);
-      console.error('Failed to reset Haar cascade:', error);
-    }
+  const handleExportConfig = () => {
+    const config = exportPhrases();
+    const blob = new Blob([config], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `eyetalk2u-phrases-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleResetToDefaults = () => {
+    resetPhrases();
   };
 
   const getActiveButton = () => {
@@ -276,58 +371,99 @@ const VoiceSession: React.FC = () => {
 
   const activeButtonData = getActiveButton();
 
-  return (
-    <div className="voice-session">
-      {/* Header */}
-      <div className="session-header">
-        
-        <div className="session-controls">
-          <div className="connection-status">
-            <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`} />
-            WebSocket: {isConnected ? 'Connected' : 'Disconnected'}
-            {wsError && <span className="error-text"> - {wsError}</span>}
-          </div>
-          
-          <button
-            onClick={resetHaar}
-            className="control-btn secondary"
-            title="Reset Haar Cascade Classifier"
-          >
-            <RefreshCw size={16} />
-            Reset Haar
-          </button>
-          
-          <button
-            onClick={isSessionActive ? stopSession : startSession}
-            disabled={isCalibrating}
-            className={`control-btn ${isSessionActive ? 'stop' : 'start'}`}
-          >
-            {isSessionActive ? <Square size={20} /> : <Play size={20} />}
-            {isSessionActive ? 'Stop Session' : 'Start Session'}
-          </button>
-          
-          <button
-            onClick={startCalibration}
-            disabled={!isConnected || isCalibrating}
-            className={`control-btn secondary ${isCalibrating ? 'calibrating' : ''}`}
-          >
-            <RotateCcw size={20} />
-            {isCalibrating ? 'Calibrating...' : 'Kalibrasi'}
-          </button>
-        </div>
+  if (isLoading) {
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <p>Loading voice buttons...</p>
       </div>
+    );
+  }
 
-      {/* Error Display */}
-      {sessionError && (
-        <div className="error-banner">
-          <span>Error: {sessionError}</span>
-          <button onClick={() => setSessionError(null)}>×</button>
+  return (
+    <div className={`voice-session ${isFullScreen ? 'fullscreen' : ''}`}>
+      {/* Header - Hidden in fullscreen */}
+      {!isFullScreen && (
+        <div className="session-header">
+                    
+          <div className="session-controls">
+            <div className="connection-status">
+              <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`} />
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </div>
+            
+            <button
+              onClick={toggleInputMode}
+              className="control-btn secondary"
+              title={useMouseSimulation ? 'Using Mouse Simulation' : 'Using WebSocket Data'}
+            >
+              <Eye size={16} />
+              {useMouseSimulation ? 'Mouse Mode' : 'WebSocket Mode'}
+            </button>
+            
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="control-btn secondary"
+            >
+              <Settings size={16} />
+              Settings
+            </button>
+
+            <button
+              onClick={toggleFullScreen}
+              className="control-btn secondary"
+            >
+              <Maximize2 size={16} />
+              Full Screen
+            </button>
+            
+            <button
+              onClick={isSessionActive ? stopSession : startSession}
+              className={`control-btn ${isSessionActive ? 'stop' : 'start'}`}
+            >
+              {isSessionActive ? <Square size={20} /> : <Play size={20} />}
+              {isSessionActive ? 'Stop Session' : 'Start Session'}
+            </button>
+            
+            <button
+              onClick={startCalibration}
+              disabled={!isConnected}
+              className="control-btn secondary"
+            >
+              <RotateCcw size={20} />
+              Calibrate
+            </button>
+          </div>
         </div>
       )}
 
       <div className="session-content">
         {/* Main Gaze Container */}
-        <div className="gaze-container" id="gaze-container">
+        <div 
+          className="gaze-container" 
+          id="gaze-container"
+          ref={gazeContainerRef}
+        >
+          {/* Full Screen Controls */}
+          {isFullScreen && (
+            <div className="fullscreen-controls">
+              <button 
+                className="control-btn secondary"
+                onClick={toggleFullScreen}
+              >
+                <Minimize2 size={16} />
+                Exit Full Screen
+              </button>
+              <button
+                onClick={isSessionActive ? stopSession : startSession}
+                className={`control-btn ${isSessionActive ? 'stop' : 'start'}`}
+              >
+                {isSessionActive ? <Square size={20} /> : <Play size={20} />}
+                {isSessionActive ? 'Stop' : 'Start'}
+              </button>
+            </div>
+          )}
+
           {/* Voice Buttons */}
           {voiceButtons.map((button) => (
             <div
@@ -368,153 +504,222 @@ const VoiceSession: React.FC = () => {
             />
           )}
 
-          {/* Calibration Overlay */}
-          {isCalibrating && (
-            <div className="calibration-overlay">
-              <div className="calibration-content">
-                <Eye size={48} />
-                <h3>Sedang Kalibrasi</h3>
-                <p>Ikuti titik kalibrasi yang muncul di layar...</p>
-                <div className="calibration-spinner"></div>
-              </div>
-            </div>
-          )}
+          {/* Input Mode Indicator */}
+          <div className="input-mode-indicator">
+            Mode: {useMouseSimulation ? 'Mouse Simulation' : 'WebSocket Data'}
+            {!isConnected && useMouseSimulation && ' (Fallback)'}
+          </div>
 
           {/* Session Status Overlay */}
-          {!isSessionActive && !isCalibrating && (
+          {!isSessionActive && (
             <div className="session-overlay">
               <div className="overlay-content">
-                <Camera size={48} />
-                <h3>Session Eye Tracking</h3>
-                <p>Klik "Start Session" untuk memulai tracking tatapan mata</p>
+                <Eye size={48} />
+                <h3>Session Not Active</h3>
+                <p>Click "Start Session" to begin the voice session.</p>
                 <div className="overlay-info">
                   <p><strong>WebSocket Status:</strong> {isConnected ? 'Connected' : 'Disconnected'}</p>
-                  <p><strong>Endpoint:</strong> ws://localhost:9001/mapping</p>
-                  {!isConnected && (
-                    <p className="warning-text">
-                      Pastikan server eye tracking berjalan di localhost:9001
-                    </p>
-                  )}
+                  <p><strong>Current Mode:</strong> {useMouseSimulation ? 'Mouse Simulation' : 'WebSocket Data'}</p>
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Session Info Panel */}
-        <div className="info-panel">
-          <div className="panel-section">
-            <h3>Status Sistem</h3>
-            <div className="status-grid">
-              <div className="status-item">
-                <span className="label">Session:</span>
-                <span className={`value ${isSessionActive ? 'active' : 'inactive'}`}>
-                  {isSessionActive ? 'Aktif' : 'Tidak Aktif'}
-                </span>
-              </div>
-              <div className="status-item">
-                <span className="label">WebSocket:</span>
-                <span className={`value ${isConnected ? 'connected' : 'disconnected'}`}>
-                  {isConnected ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-              <div className="status-item">
-                <span className="label">Kalibrasi:</span>
-                <span className={`value ${isCalibrating ? 'calibrating' : 'ready'}`}>
-                  {isCalibrating ? 'Berlangsung' : 'Siap'}
-                </span>
-              </div>
-              <div className="status-item">
-                <span className="label">Button Aktif:</span>
-                <span className="value">
-                  {activeButtonData ? activeButtonData.label : 'Tidak ada'}
-                </span>
-              </div>
-              <div className="status-item">
-                <span className="label">Progress:</span>
-                <span className="value">
-                  {activeButtonData ? `${Math.round(dwellProgress)}%` : '0%'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel-section">
-            <h3>Audio Terakhir</h3>
-            {lastPlayedAudio ? (
-              <div className="last-audio">
-                <Volume2 size={20} />
-                <span>{lastPlayedAudio}</span>
-              </div>
-            ) : (
-              <p className="no-audio">Belum ada audio yang diputar</p>
-            )}
-          </div>
-
-          <div className="panel-section">
-            <h3>Data Gaze Real-time</h3>
-            {gazePoint ? (
-              <div className="gaze-data">
-                <div className="gaze-coord">
-                  <span>X:</span>
-                  <strong>{gazePoint.x.toFixed(1)}%</strong>
-                </div>
-                <div className="gaze-coord">
-                  <span>Y:</span>
-                  <strong>{gazePoint.y.toFixed(1)}%</strong>
-                </div>
-                <div className="gaze-time">
-                  <span>Updated:</span>
-                  {new Date(gazePoint.timestamp).toLocaleTimeString()}
-                </div>
-              </div>
-            ) : (
-              <p className="no-gaze">Menunggu data gaze...</p>
-            )}
-          </div>
-
-          <div className="panel-section">
-            <h3>Konfigurasi Button</h3>
-            <div className="buttons-config">
-              {voiceButtons.map(button => (
-                <div key={button.id} className="button-config-item">
-                  <div 
-                    className="color-indicator"
-                    style={{ backgroundColor: button.color }}
+        {/* Settings Panel */}
+        {showSettings && !isFullScreen && (
+          <div className="settings-panel">
+            <div className="panel-section">
+              <h3>Manage Voice Buttons</h3>
+              
+              {/* Add New Button Form */}
+              <div className="add-button-form">
+                <h4>Add New Button</h4>
+                <div className="form-row">
+                  <input
+                    type="text"
+                    placeholder="Button Label"
+                    value={newButtonConfig.label}
+                    onChange={(e) => setNewButtonConfig(prev => ({ ...prev, label: e.target.value }))}
                   />
-                  <div className="button-info">
-                    <span className="button-name">{button.label}</span>
-                    <span className="button-position">
-                      ({button.centerX}%, {button.centerY}%) - R{button.radius}%
-                    </span>
-                  </div>
-                  <span className="dwell-time">{button.dwellTime}ms</span>
+                  <input
+                    type="color"
+                    value={newButtonConfig.color}
+                    onChange={(e) => setNewButtonConfig(prev => ({ ...prev, color: e.target.value }))}
+                  />
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="form-row">
+                  <label>
+                    X Position: {newButtonConfig.centerX}%
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={newButtonConfig.centerX}
+                      onChange={(e) => setNewButtonConfig(prev => ({ ...prev, centerX: Number(e.target.value) }))}
+                    />
+                  </label>
+                  <label>
+                    Y Position: {newButtonConfig.centerY}%
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={newButtonConfig.centerY}
+                      onChange={(e) => setNewButtonConfig(prev => ({ ...prev, centerY: Number(e.target.value) }))}
+                    />
+                  </label>
+                </div>
+                <div className="form-row">
+                  <label>
+                    Radius: {newButtonConfig.radius}%
+                    <input
+                      type="range"
+                      min="5"
+                      max="20"
+                      value={newButtonConfig.radius}
+                      onChange={(e) => setNewButtonConfig(prev => ({ ...prev, radius: Number(e.target.value) }))}
+                    />
+                  </label>
+                  <label>
+                    Dwell Time: {newButtonConfig.dwellTime}ms
+                    <input
+                      type="range"
+                      min="500"
+                      max="5000"
+                      step="100"
+                      value={newButtonConfig.dwellTime}
+                      onChange={(e) => setNewButtonConfig(prev => ({ ...prev, dwellTime: Number(e.target.value) }))}
+                    />
+                  </label>
+                </div>
+                <button onClick={handleAddButton} className="btn primary">
+                  <Plus size={16} />
+                  Add Button
+                </button>
+              </div>
 
-          <div className="panel-section">
-            <h3>Endpoint Info</h3>
-            <div className="endpoint-info">
-              <div className="endpoint-item">
-                <strong>WebSocket:</strong> ws://localhost:9001/mapping
+              {/* Existing Buttons List */}
+              <div className="buttons-list">
+                <h4>Existing Buttons</h4>
+                {voiceButtons.map(button => (
+                  <div key={button.id} className="button-item">
+                    <div 
+                      className="button-preview"
+                      style={{ backgroundColor: button.color }}
+                    />
+                    <div className="button-info">
+                      <strong>{button.label}</strong>
+                      <span>Pos: {button.centerX}%, {button.centerY}%</span>
+                      <span>Radius: {button.radius}%</span>
+                      <span>Dwell: {button.dwellTime}ms</span>
+                    </div>
+                    <button 
+                      onClick={() => handleDeleteButton(button.id)}
+                      className="btn danger"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div className="endpoint-item">
-                <strong>HTTP Start:</strong> http://localhost:9001/start
-              </div>
-              <div className="endpoint-item">
-                <strong>HTTP Stop:</strong> http://localhost:9001/stop
-              </div>
-              <div className="endpoint-item">
-                <strong>HTTP Calibrate:</strong> http://localhost:9001/calibrate
-              </div>
-              <div className="endpoint-item">
-                <strong>HTTP Reset Haar:</strong> http://localhost:9001/reset-haar
+
+              {/* Export/Reset Controls */}
+              <div className="management-controls">
+                <button onClick={handleExportConfig} className="btn secondary">
+                  <Download size={16} />
+                  Export Config
+                </button>
+                <button onClick={handleResetToDefaults} className="btn secondary">
+                  <Save size={16} />
+                  Reset to Defaults
+                </button>
               </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Session Info Panel */}
+        {!showSettings && !isFullScreen && (
+          <div className="info-panel">
+            <div className="panel-section">
+              <h3>Status Session</h3>
+              <div className="status-grid">
+                <div className="status-item">
+                  <span className="label">Status:</span>
+                  <span className={`value ${isSessionActive ? 'active' : 'inactive'}`}>
+                    {isSessionActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div className="status-item">
+                  <span className="label">WebSocket:</span>
+                  <span className={`value ${isConnected ? 'connected' : 'disconnected'}`}>
+                    {isConnected ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+                <div className="status-item">
+                  <span className="label">Input Mode:</span>
+                  <span className="value">
+                    {useMouseSimulation ? 'Mouse' : 'WebSocket'}
+                  </span>
+                </div>
+                <div className="status-item">
+                  <span className="label">Active Button:</span>
+                  <span className="value">
+                    {activeButtonData ? activeButtonData.label : 'None'}
+                  </span>
+                </div>
+                <div className="status-item">
+                  <span className="label">Progress:</span>
+                  <span className="value">
+                    {activeButtonData ? `${Math.round(dwellProgress)}%` : '0%'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="panel-section">
+              <h3>Last Played Audio</h3>
+              {lastPlayedAudio ? (
+                <div className="last-audio">
+                  <Volume2 size={20} />
+                  <span>{lastPlayedAudio}</span>
+                </div>
+              ) : (
+                <p className="no-audio">No audio played</p>
+              )}
+            </div>
+
+            <div className="panel-section">
+              <h3>Gaze Data</h3>
+              {gazePoint ? (
+                <div className="gaze-data">
+                  <div>X: {gazePoint.x.toFixed(1)}%</div>
+                  <div>Y: {gazePoint.y.toFixed(1)}%</div>
+                  <div>Time: {new Date(gazePoint.timestamp).toLocaleTimeString()}</div>
+                </div>
+              ) : (
+                <p className="no-gaze">No gaze data</p>
+              )}
+            </div>
+
+            <div className="panel-section">
+              <h3>Button Configuration</h3>
+              <div className="buttons-config">
+                {voiceButtons.map(button => (
+                  <div key={button.id} className="button-config-item">
+                    <div 
+                      className="color-indicator"
+                      style={{ backgroundColor: button.color }}
+                    />
+                    <span className="button-name">{button.label}</span>
+                    <span className="dwell-time">{button.dwellTime}ms</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Hidden Audio Element */}
