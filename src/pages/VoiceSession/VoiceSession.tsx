@@ -79,10 +79,11 @@ const VoiceSession: React.FC = () => {
   const voiceButtons: VoiceButton[] = phrases.map((phrase, index) => {
     // Position buttons in a grid
     const positions = [
-      { x: 25, y: 30 }, // Top-left
-      { x: 75, y: 30 }, // Top-right
-      { x: 25, y: 70 }, // Bottom-left
-      { x: 75, y: 70 }  // Bottom-right
+      { x: 25, y: 25 }, // Top-left
+      { x: 75, y: 25 }, // Top-right
+      { x: 50, y: 50 },  // Center
+      { x: 25, y: 75 }, // Bottom-left
+      { x: 75, y: 75 }  // Bottom-right
     ];
     
     const position = positions[index % positions.length];
@@ -93,7 +94,7 @@ const VoiceSession: React.FC = () => {
       audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`, // Fallback URL
       centerX: position.x,
       centerY: position.y,
-      radius: 10,
+      radius: 12,
       color: getColorByCategory(phrase.category),
       dwellTime: 2000
     };
