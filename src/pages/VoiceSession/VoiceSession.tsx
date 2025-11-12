@@ -38,11 +38,7 @@ const VoiceSession: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [newButtonConfig, setNewButtonConfig] = useState<Partial<VoiceButton>>({
     label: '',
-    centerX: 50,
-    centerY: 50,
-    radius: 10,
-    color: '#3B82F6',
-    dwellTime: 2000
+    color: '#3B82F6'
   });
   
   const dwellTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -322,7 +318,6 @@ const VoiceSession: React.FC = () => {
     }
   };
 
-  // Button management functions - now using phrases
   const handleAddButton = () => {
     if (!newButtonConfig.label?.trim()) {
       alert('Label is required');
@@ -339,11 +334,7 @@ const VoiceSession: React.FC = () => {
 
     setNewButtonConfig({
       label: '',
-      centerX: 50,
-      centerY: 50,
-      radius: 10,
-      color: '#3B82F6',
-      dwellTime: 2000
+      color: '#3B82F6'
     });
   };
 
@@ -532,72 +523,27 @@ const VoiceSession: React.FC = () => {
             <div className="panel-section">
               <h3>Manage Voice Buttons</h3>
               
-              {/* Add New Button Form */}
-              <div className="add-button-form">
-                <h4>Add New Button</h4>
-                <div className="form-row">
-                  <input
-                    type="text"
-                    placeholder="Button Label"
-                    value={newButtonConfig.label}
-                    onChange={(e) => setNewButtonConfig(prev => ({ ...prev, label: e.target.value }))}
-                  />
-                  <input
-                    type="color"
-                    value={newButtonConfig.color}
-                    onChange={(e) => setNewButtonConfig(prev => ({ ...prev, color: e.target.value }))}
-                  />
-                </div>
-                <div className="form-row">
-                  <label>
-                    X Position: {newButtonConfig.centerX}%
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={newButtonConfig.centerX}
-                      onChange={(e) => setNewButtonConfig(prev => ({ ...prev, centerX: Number(e.target.value) }))}
-                    />
-                  </label>
-                  <label>
-                    Y Position: {newButtonConfig.centerY}%
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={newButtonConfig.centerY}
-                      onChange={(e) => setNewButtonConfig(prev => ({ ...prev, centerY: Number(e.target.value) }))}
-                    />
-                  </label>
-                </div>
-                <div className="form-row">
-                  <label>
-                    Radius: {newButtonConfig.radius}%
-                    <input
-                      type="range"
-                      min="5"
-                      max="20"
-                      value={newButtonConfig.radius}
-                      onChange={(e) => setNewButtonConfig(prev => ({ ...prev, radius: Number(e.target.value) }))}
-                    />
-                  </label>
-                  <label>
-                    Dwell Time: {newButtonConfig.dwellTime}ms
-                    <input
-                      type="range"
-                      min="500"
-                      max="5000"
-                      step="100"
-                      value={newButtonConfig.dwellTime}
-                      onChange={(e) => setNewButtonConfig(prev => ({ ...prev, dwellTime: Number(e.target.value) }))}
-                    />
-                  </label>
-                </div>
-                <button onClick={handleAddButton} className="btn primary">
-                  <Plus size={16} />
-                  Add Button
-                </button>
+            {/* Add New Button Form */}
+            <div className="add-button-form">
+              <h4>Change Button</h4>
+              <div className="form-row">
+                <input
+                  type="text"
+                  placeholder="Button Label"
+                  value={newButtonConfig.label}
+                  onChange={(e) => setNewButtonConfig(prev => ({ ...prev, label: e.target.value }))}
+                />
+                <input
+                  type="color"
+                  value={newButtonConfig.color}
+                  onChange={(e) => setNewButtonConfig(prev => ({ ...prev, color: e.target.value }))}
+                />
               </div>
+              <button onClick={handleAddButton} className="btn primary">
+                <Plus size={16} />
+                Add Button
+              </button>
+            </div>
 
               {/* Existing Buttons List */}
               <div className="buttons-list">
