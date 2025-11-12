@@ -15,26 +15,26 @@ const Devices: React.FC = () => {
         name: 'EyeTalk2U Device #001',
         status: 'connected',
         patientId: 'patient_123',
-        lastActive: new Date('2024-01-20T11:30:00')
+        lastActive: new Date('2025-01-20T11:30:00')
       },
       {
         id: 'device_002',
         name: 'EyeTalk2U Device #002',
         status: 'disconnected',
-        lastActive: new Date('2024-01-19T15:45:00')
+        lastActive: new Date('2025-01-19T15:45:00')
       },
       {
         id: 'device_003',
         name: 'EyeTalk2U Device #003',
         status: 'calibrating',
         patientId: 'patient_456',
-        lastActive: new Date('2024-01-20T10:15:00')
+        lastActive: new Date('2025-01-20T10:15:00')
       },
       {
         id: 'device_004',
         name: 'EyeTalk2U Device #004',
         status: 'connected',
-        lastActive: new Date('2024-01-20T09:30:00')
+        lastActive: new Date('2025-01-20T09:30:00')
       }
     ];
     setDevices(mockDevices);

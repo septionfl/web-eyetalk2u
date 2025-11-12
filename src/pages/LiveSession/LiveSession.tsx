@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, RotateCcw, Eye } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Play, Square, RotateCcw, Eye, Mic } from 'lucide-react';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import './LiveSession.css';
 
@@ -76,6 +77,12 @@ const LiveSession: React.FC = () => {
               <RotateCcw size={20} />
               Calibrate
             </button>
+
+            {/* Button untuk Voice Session */}
+            <Link to="/voice-session" className="control-btn primary">
+              <Mic size={20} />
+              Voice Session
+            </Link>
           </div>
         </div>
 

@@ -8,6 +8,7 @@ import LiveSession from '../src/pages/LiveSession/LiveSession';
 import Phrases from '../src/pages/Phrases/Phrases';
 import Logs from '../src/pages/Logs/Logs';
 import Devices from '../src/pages/Devices/Devices';
+import VoiceSession from '../src/pages/VoiceSession/VoiceSession';
 import './App.css';
 
 function App() {
@@ -25,6 +26,8 @@ function App() {
             <Route path="phrases" element={<Phrases />} />
             <Route path="logs" element={<Logs />} />
             <Route path="devices" element={<ProtectedRoute requiredRole={['admin', 'operator']}><Devices /></ProtectedRoute>} />
+            {/* Tambahkan route baru */}
+            <Route path="voice-session" element={<VoiceSession />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
