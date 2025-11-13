@@ -1,7 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Wifi, WifiOff, RefreshCw, Settings, Power, Calendar, Battery } from 'lucide-react';
-import { Device } from '../../types/index';
-import './Devices.css';
+import React, { useState, useEffect } from "react";
+import {
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  Settings,
+  Power,
+  Calendar,
+  Battery,
+} from "lucide-react";
+import { type Device } from "../../types/index";
+import "./Devices.css";
 
 const Devices: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -11,78 +19,86 @@ const Devices: React.FC = () => {
     // Mock data
     const mockDevices: Device[] = [
       {
-        id: 'device_001',
-        name: 'EyeTalk2U Device #001',
-        status: 'connected',
-        patientId: 'patient_123',
-        lastActive: new Date('2025-01-20T11:30:00')
+        id: "device_001",
+        name: "EyeTalk2U Device #001",
+        status: "connected",
+        patientId: "patient_123",
+        lastActive: new Date("2025-01-20T11:30:00"),
       },
       {
-        id: 'device_002',
-        name: 'EyeTalk2U Device #002',
-        status: 'disconnected',
-        lastActive: new Date('2025-01-19T15:45:00')
+        id: "device_002",
+        name: "EyeTalk2U Device #002",
+        status: "disconnected",
+        lastActive: new Date("2025-01-19T15:45:00"),
       },
       {
-        id: 'device_003',
-        name: 'EyeTalk2U Device #003',
-        status: 'calibrating',
-        patientId: 'patient_456',
-        lastActive: new Date('2025-01-20T10:15:00')
+        id: "device_003",
+        name: "EyeTalk2U Device #003",
+        status: "calibrating",
+        patientId: "patient_456",
+        lastActive: new Date("2025-01-20T10:15:00"),
       },
       {
-        id: 'device_004',
-        name: 'EyeTalk2U Device #004',
-        status: 'connected',
-        lastActive: new Date('2025-01-20T09:30:00')
-      }
+        id: "device_004",
+        name: "EyeTalk2U Device #004",
+        status: "connected",
+        lastActive: new Date("2025-01-20T09:30:00"),
+      },
     ];
     setDevices(mockDevices);
   }, []);
 
   const handleCalibrate = (deviceId: string) => {
     // Send calibration command to device
-    setDevices(devices.map(device =>
-      device.id === deviceId
-        ? { ...device, status: 'calibrating' as const }
-        : device
-    ));
-    
+    setDevices(
+      devices.map((device) =>
+        device.id === deviceId
+          ? { ...device, status: "calibrating" as const }
+          : device
+      )
+    );
+
     // Simulate calibration completion
     setTimeout(() => {
-      setDevices(devices.map(device =>
-        device.id === deviceId
-          ? { ...device, status: 'connected' as const }
-          : device
-      ));
+      setDevices(
+        devices.map((device) =>
+          device.id === deviceId
+            ? { ...device, status: "connected" as const }
+            : device
+        )
+      );
     }, 3000);
   };
 
   const handleRestart = (deviceId: string) => {
     // Send restart command to device
-    setDevices(devices.map(device =>
-      device.id === deviceId
-        ? { ...device, status: 'calibrating' as const }
-        : device
-    ));
-    
+    setDevices(
+      devices.map((device) =>
+        device.id === deviceId
+          ? { ...device, status: "calibrating" as const }
+          : device
+      )
+    );
+
     // Simulate restart completion
     setTimeout(() => {
-      setDevices(devices.map(device =>
-        device.id === deviceId
-          ? { ...device, status: 'connected' as const }
-          : device
-      ));
+      setDevices(
+        devices.map((device) =>
+          device.id === deviceId
+            ? { ...device, status: "connected" as const }
+            : device
+        )
+      );
     }, 2000);
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'connected':
+      case "connected":
         return <Wifi size={20} className="status-connected" />;
-      case 'disconnected':
+      case "disconnected":
         return <WifiOff size={20} className="status-disconnected" />;
-      case 'calibrating':
+      case "calibrating":
         return <RefreshCw size={20} className="status-calibrating" />;
       default:
         return <WifiOff size={20} />;
@@ -91,12 +107,12 @@ const Devices: React.FC = () => {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'connected':
-        return 'Connected';
-      case 'disconnected':
-        return 'Disconnected';
-      case 'calibrating':
-        return 'Calibrating';
+      case "connected":
+        return "Connected";
+      case "disconnected":
+        return "Disconnected";
+      case "calibrating":
+        return "Calibrating";
       default:
         return status;
     }
@@ -109,13 +125,13 @@ const Devices: React.FC = () => {
         <div className="header-stats">
           <div className="stat">
             <span className="stat-value">
-              {devices.filter(d => d.status === 'connected').length}
+              {devices.filter((d) => d.status === "connected").length}
             </span>
             <span className="stat-label">Connected</span>
           </div>
           <div className="stat">
             <span className="stat-value">
-              {devices.filter(d => d.status === 'disconnected').length}
+              {devices.filter((d) => d.status === "disconnected").length}
             </span>
             <span className="stat-label">Offline</span>
           </div>
@@ -129,10 +145,10 @@ const Devices: React.FC = () => {
       {/* Devices Grid */}
       <div className="devices-grid">
         {devices.map((device) => (
-          <div 
-            key={device.id} 
+          <div
+            key={device.id}
             className={`device-card ${device.status} ${
-              selectedDevice?.id === device.id ? 'selected' : ''
+              selectedDevice?.id === device.id ? "selected" : ""
             }`}
             onClick={() => setSelectedDevice(device)}
           >
@@ -146,7 +162,7 @@ const Devices: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <button 
+              <button
                 className="device-settings"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -165,14 +181,14 @@ const Devices: React.FC = () => {
               <div className="detail-row">
                 <span className="label">Patient:</span>
                 <span className="value">
-                  {device.patientId || 'Not assigned'}
+                  {device.patientId || "Not assigned"}
                 </span>
               </div>
               <div className="detail-row">
                 <span className="label">Last Active:</span>
                 <span className="value">
                   <Calendar size={14} />
-                  {device.lastActive.toLocaleDateString()} {' '}
+                  {device.lastActive.toLocaleDateString()}{" "}
                   {device.lastActive.toLocaleTimeString()}
                 </span>
               </div>
@@ -180,7 +196,7 @@ const Devices: React.FC = () => {
                 <span className="label">Battery:</span>
                 <span className="value">
                   <Battery size={14} />
-                  {device.status === 'connected' ? '85%' : 'N/A'}
+                  {device.status === "connected" ? "85%" : "N/A"}
                 </span>
               </div>
             </div>
@@ -191,7 +207,7 @@ const Devices: React.FC = () => {
                   e.stopPropagation();
                   handleCalibrate(device.id);
                 }}
-                disabled={device.status !== 'connected'}
+                disabled={device.status !== "connected"}
                 className="btn secondary"
               >
                 <RefreshCw size={16} />
@@ -202,7 +218,7 @@ const Devices: React.FC = () => {
                   e.stopPropagation();
                   handleRestart(device.id);
                 }}
-                disabled={device.status === 'disconnected'}
+                disabled={device.status === "disconnected"}
                 className="btn secondary"
               >
                 <Power size={16} />
@@ -218,14 +234,14 @@ const Devices: React.FC = () => {
         <div className="device-details-panel">
           <div className="panel-header">
             <h3>Device Details</h3>
-            <button 
+            <button
               onClick={() => setSelectedDevice(null)}
               className="close-btn"
             >
               ×
             </button>
           </div>
-          
+
           <div className="panel-content">
             <div className="detail-section">
               <h4>Device Information</h4>
@@ -247,7 +263,7 @@ const Devices: React.FC = () => {
                 <div className="detail-item">
                   <span className="label">Patient</span>
                   <span className="value">
-                    {selectedDevice.patientId || 'Not assigned'}
+                    {selectedDevice.patientId || "Not assigned"}
                   </span>
                 </div>
               </div>
@@ -260,9 +276,7 @@ const Devices: React.FC = () => {
                   <div className="activity-time">
                     {selectedDevice.lastActive.toLocaleString()}
                   </div>
-                  <div className="activity-desc">
-                    Last device communication
-                  </div>
+                  <div className="activity-desc">Last device communication</div>
                 </div>
                 {/* Add more activity items as needed */}
               </div>
@@ -271,15 +285,9 @@ const Devices: React.FC = () => {
             <div className="detail-section">
               <h4>Advanced Actions</h4>
               <div className="action-buttons-advanced">
-                <button className="btn danger">
-                  Factory Reset
-                </button>
-                <button className="btn secondary">
-                  Update Firmware
-                </button>
-                <button className="btn secondary">
-                  Export Logs
-                </button>
+                <button className="btn danger">Factory Reset</button>
+                <button className="btn secondary">Update Firmware</button>
+                <button className="btn secondary">Export Logs</button>
               </div>
             </div>
           </div>

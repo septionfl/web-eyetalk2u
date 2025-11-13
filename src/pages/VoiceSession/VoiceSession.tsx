@@ -1,19 +1,41 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  Play, Square, RotateCcw, Eye, Volume2, Home, 
-  Maximize2, Minimize2, Settings, Plus, Trash2,
-  Save, Upload, Download
-} from 'lucide-react';
-import { useWebSocket } from '../../hooks/useWebSocket';
-import { usePhrasesStorage } from '../../hooks/useLocalStorage';
-import './VoiceSession.css';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Link } from "react-router-dom";
+import {
+  Play,
+  Square,
+  Eye,
+  Volume2,
+  Maximize2,
+  Minimize2,
+  Settings,
+  Plus,
+  Trash2,
+  Save,
+  Download,
+  ArrowLeft,
+  RotateCcw,
+} from "lucide-react";
+import { useWebSocket } from "../../hooks/useWebSocket";
+import { usePhrasesStorage } from "../../hooks/useLocalStorage";
+import { eyeTrackingApi } from "../../services/eyeTrackingApi";
+import { useToast } from "../../contexts/ToastContext";
+import "./VoiceSession.css";
 
 interface GazePoint {
   x: number;
   y: number;
   timestamp: number;
 }
+
+// =========================
+// Dwell/Tracking Parameters
+// =========================
+// These defaults can be tuned or moved to a shared constants file if needed.
+const DEFAULT_DWELL_SECONDS = 0.6; // T
+const DEFAULT_FPS = 24; // F
+const DEFAULT_THETA = 0.8; // θ
+const DEFAULT_CONSEC_MS = 1500; // M in milliseconds
+const SMOOTHING_WINDOW = 12; // moving average of last K gaze points
 
 interface VoiceButton {
   id: string;
@@ -23,137 +45,453 @@ interface VoiceButton {
   centerY: number;
   radius: number;
   color: string;
-  dwellTime: number;
 }
 
 const VoiceSession: React.FC = () => {
-  const navigate = useNavigate();
+  const { showToast } = useToast();
   const [isSessionActive, setIsSessionActive] = useState(false);
-  const [gazePoint, setGazePoint] = useState<GazePoint | null>(null);
+  const [gazePoint, setGazePoint] = useState<GazePoint | null>(null); // smoothed point for UI
   const [activeButton, setActiveButton] = useState<string | null>(null);
   const [dwellProgress, setDwellProgress] = useState<number>(0);
   const [lastPlayedAudio, setLastPlayedAudio] = useState<string | null>(null);
   const [useMouseSimulation, setUseMouseSimulation] = useState(true);
+  const inputModeRef = useRef<boolean>(true); // Persist mode across re-renders
+
+  // Sync ref with state
+  useEffect(() => {
+    inputModeRef.current = useMouseSimulation;
+  }, [useMouseSimulation]);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [newButtonConfig, setNewButtonConfig] = useState<Partial<VoiceButton>>({
-    label: '',
-    color: '#3B82F6'
+    label: "",
+    color: "#3B82F6",
   });
-  
-  const dwellTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const gazeContainerRef = useRef<HTMLDivElement>(null);
-  
-  const { lastMessage, sendMessage, isConnected } = useWebSocket();
-  const { 
-    phrases, 
-    isLoading, 
-    addPhrase, 
-    updatePhrase, 
-    deletePhrase, 
-    resetPhrases,
-    exportPhrases,
-    incrementUsage 
+
+  const { gazeData, sendMessage, isConnected } = useWebSocket(
+    "ws://localhost:9001/mapping"
+  );
+  const {
+    phrases,
+    isLoading,
+    addPhrase,
+    deletePhrase,
+    reloadPhrases,
+    incrementUsage,
   } = usePhrasesStorage();
 
   // Helper function untuk menentukan warna berdasarkan kategori
   const getColorByCategory = (category: string): string => {
     const colorMap: { [key: string]: string } = {
-      'kebutuhan_dasar': '#3B82F6', // Blue
-      'medis': '#EF4444',           // Red
-      'kenyamanan': '#10B981',      // Green
-      'bantuan': '#F59E0B',         // Yellow
-      'emergency': '#DC2626'        // Dark Red
+      kebutuhan_dasar: "#3B82F6", // Blue
+      medis: "#EF4444", // Red
+      kenyamanan: "#10B981", // Green
+      bantuan: "#F59E0B", // Yellow
+      emergency: "#DC2626", // Dark Red
     };
-    
-    return colorMap[category] || '#6B7280'; // Gray default
+
+    return colorMap[category] || "#6B7280"; // Gray default
   };
 
   // Konversi phrases menjadi voiceButtons
-  const voiceButtons: VoiceButton[] = phrases.map((phrase, index) => {
-    // Position buttons in a grid
-    const positions = [
-      { x: 25, y: 25 }, // Top-left
-      { x: 75, y: 25 }, // Top-right
-      { x: 50, y: 50 },  // Center
-      { x: 25, y: 75 }, // Bottom-left
-      { x: 75, y: 75 }  // Bottom-right
-    ];
-    
-    const position = positions[index % positions.length];
-    
-    return {
-      id: phrase.id,
-      label: phrase.text,
-      audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`, // Fallback URL
-      centerX: position.x,
-      centerY: position.y,
-      radius: 12,
-      color: getColorByCategory(phrase.category),
-      dwellTime: 2000
-    };
-  });
+  const voiceButtons: VoiceButton[] = React.useMemo(() => {
+    if (phrases.length === 0) return [];
+    const n = phrases.length;
 
-  // Handle WebSocket messages
-  useEffect(() => {
-    if (lastMessage && isSessionActive) {
-      console.log('WebSocket message received:', lastMessage);
-      
-      switch (lastMessage.type) {
-        case 'gaze_data':
-          const { x, y, timestamp } = lastMessage.data;
-          const normalizedX = Math.max(0, Math.min(100, x));
-          const normalizedY = Math.max(0, Math.min(100, y));
-          
-          setGazePoint({ x: normalizedX, y: normalizedY, timestamp });
-          checkGazeInButtons(normalizedX, normalizedY);
-          setUseMouseSimulation(false);
-          break;
-          
-        case 'calibration_complete':
-          console.log('Calibration completed');
-          break;
-          
-        default:
-          break;
-      }
+    if (n === 1) {
+      const phrase = phrases[0];
+      const color = phrase.color || getColorByCategory(phrase.category);
+      return [
+        {
+          id: phrase.id,
+          label: phrase.text,
+          audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`,
+          centerX: 50,
+          centerY: 50,
+          radius: 24,
+          color,
+        },
+      ];
     }
-  }, [lastMessage, isSessionActive]);
+
+    if (n === 2) {
+      const positions = [
+        { x: 25, y: 50 },
+        { x: 75, y: 50 },
+      ];
+      return phrases.map((phrase, index) => ({
+        id: phrase.id,
+        label: phrase.text,
+        audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`,
+        centerX: positions[index].x,
+        centerY: positions[index].y,
+        radius: 20,
+        color: phrase.color || getColorByCategory(phrase.category),
+      }));
+    }
+
+    if (n === 3) {
+      const positions = [
+        { x: 50, y: 30 },
+        { x: 30, y: 70 },
+        { x: 70, y: 70 },
+      ];
+      return phrases.map((phrase, index) => ({
+        id: phrase.id,
+        label: phrase.text,
+        audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`,
+        centerX: positions[index].x,
+        centerY: positions[index].y,
+        radius: 12,
+        color: phrase.color || getColorByCategory(phrase.category),
+      }));
+    }
+
+    if (n === 5) {
+      const positions = [
+        { x: 25, y: 25 },
+        { x: 75, y: 25 },
+        { x: 50, y: 50 },
+        { x: 25, y: 75 },
+        { x: 75, y: 75 },
+      ];
+      return phrases.map((phrase, index) => ({
+        id: phrase.id,
+        label: phrase.text,
+        audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`,
+        centerX: positions[index].x,
+        centerY: positions[index].y,
+        radius: 12,
+        color: phrase.color || getColorByCategory(phrase.category),
+      }));
+    }
+
+    const cols = Math.ceil(Math.sqrt(n));
+    const rows = Math.ceil(n / cols);
+
+    // Keep some safety padding from the container edges
+    const edgePad = 6; // percent
+    const effW = 100 - edgePad * 2;
+    const effH = 100 - edgePad * 2;
+
+    const cellW = effW / cols;
+    const cellH = effH / rows;
+    const minCell = Math.min(cellW, cellH);
+
+    // Smaller fill factors = more gap between circles
+    const fillFactor = n <= 4 ? 0.44 : n <= 9 ? 0.4 : n <= 16 ? 0.36 : 0.32;
+    const targetRadius = (minCell * fillFactor) / 2;
+    const maxRadius = Math.max(8, minCell / 2 - 4); // ensure visible gap
+    const minRadius = n > 12 ? 8 : 10;
+    const computedRadius = Math.max(
+      6,
+      Math.max(minRadius, Math.min(targetRadius, maxRadius)) - 2
+    );
+
+    return phrases.map((phrase, index) => {
+      const r = Math.floor(index / cols);
+      const c = index % cols;
+      const centerX = edgePad + c * cellW + cellW / 2;
+      const centerY = edgePad + r * cellH + cellH / 2;
+
+      return {
+        id: phrase.id,
+        label: phrase.text,
+        audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`,
+        centerX,
+        centerY,
+        radius: computedRadius,
+        color: phrase.color || getColorByCategory(phrase.category),
+      };
+    });
+  }, [phrases]);
+
+  // =========================
+  // Eye-Tracking State/Refs
+  // =========================
+  // Raw gaze samples used for smoothing (not rendered)
+  const rawGazeBufferRef = useRef<GazePoint[]>([]);
+  // Tracking of the current candidate button
+  const trackingButtonIdRef = useRef<string | null>(null);
+  // Sliding window buffer for the last T seconds for the current button
+  const windowBufferRef = useRef<{ t: number; inside: boolean }[]>([]);
+  // Count of consecutive frames inside current button region
+  const consecutiveInsideRef = useRef<number>(0);
+  // RAF control
+  const rafIdRef = useRef<number | null>(null);
+  const lastSampleTimeRef = useRef<number>(0);
+
+  // Text-to-speech fallback
+  const speakText = useCallback((text: string) => {
+    if ("speechSynthesis" in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "id-ID";
+      utterance.rate = 0.8;
+      speechSynthesis.speak(utterance);
+    }
+  }, []);
+
+  // Trigger button action
+  const triggerButton = useCallback(
+    (button: VoiceButton) => {
+      console.log(`Triggering button: ${button.label}`);
+      setLastPlayedAudio(button.label);
+
+      // Increment usage count
+      incrementUsage(button.id);
+
+      if (audioRef.current) {
+        audioRef.current.src = button.audioUrl;
+        audioRef.current.play().catch((error) => {
+          console.error("Error playing audio:", error);
+          speakText(button.label);
+        });
+      } else {
+        speakText(button.label);
+      }
+
+      sendMessage({
+        type: "button_triggered",
+        data: {
+          buttonId: button.id,
+          buttonLabel: button.label,
+          timestamp: Date.now(),
+          gazePoint: gazePoint,
+        },
+      });
+    },
+    [sendMessage, gazePoint, incrementUsage, speakText]
+  );
+
+  // =========================
+  // Geometry helpers
+  // =========================
+  const isInsideButton = useCallback(
+    (x: number, y: number, button: VoiceButton) => {
+      const distance = Math.sqrt(
+        Math.pow(x - button.centerX, 2) + Math.pow(y - button.centerY, 2)
+      );
+      return distance <= button.radius;
+    },
+    []
+  );
+
+  const findButtonAtPoint = useCallback(
+    (x: number, y: number): VoiceButton | null => {
+      for (const button of voiceButtons) {
+        if (isInsideButton(x, y, button)) return button;
+      }
+      return null;
+    },
+    [voiceButtons, isInsideButton]
+  );
+
+  // =========================
+  // Smoothing and Frame Loop
+  // =========================
+  // Push a raw sample and compute smoothed gaze (moving average)
+  const pushRawGazeSample = useCallback((sample: GazePoint) => {
+    const buf = rawGazeBufferRef.current;
+    buf.push(sample);
+    if (buf.length > SMOOTHING_WINDOW) buf.shift();
+
+    // Moving average smoothing
+    const sum = buf.reduce(
+      (acc, p) => {
+        acc.x += p.x;
+        acc.y += p.y;
+        return acc;
+      },
+      { x: 0, y: 0 }
+    );
+    const k = buf.length || 1;
+    const smoothed: GazePoint = {
+      x: sum.x / k,
+      y: sum.y / k,
+      timestamp: sample.timestamp,
+    };
+    setGazePoint(smoothed);
+    return smoothed;
+  }, []);
+
+  // Core dwell-time eye-tracking loop
+  useEffect(() => {
+    if (!isSessionActive) {
+      // Reset all tracking state
+      trackingButtonIdRef.current = null;
+      windowBufferRef.current = [];
+      consecutiveInsideRef.current = 0;
+      setActiveButton(null);
+      setDwellProgress(0);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      return;
+    }
+
+    const targetFrameIntervalMs = 1000 / DEFAULT_FPS;
+    const dwellWindowMs = DEFAULT_DWELL_SECONDS * 1000;
+    const mFramesRequired = Math.max(
+      1,
+      Math.round((DEFAULT_CONSEC_MS / 1000) * DEFAULT_FPS)
+    );
+
+    const tick = () => {
+      rafIdRef.current = requestAnimationFrame(tick);
+      const now = performance.now();
+      if (now - lastSampleTimeRef.current < targetFrameIntervalMs) return;
+      lastSampleTimeRef.current = now;
+
+      // Use the latest smoothed gaze point
+      const currentGaze = gazePoint;
+      if (!currentGaze) return;
+
+      // Determine candidate button under current gaze
+      const candidate = findButtonAtPoint(currentGaze.x, currentGaze.y);
+      const currentTrackingId = trackingButtonIdRef.current;
+
+      // Handle transitions between buttons or no button
+      if ((candidate?.id || null) !== currentTrackingId) {
+        trackingButtonIdRef.current = candidate ? candidate.id : null;
+        windowBufferRef.current = [];
+        consecutiveInsideRef.current = 0;
+        setDwellProgress(0);
+        setActiveButton(candidate ? candidate.id : null);
+      }
+
+      if (!candidate) {
+        // No button under gaze; nothing to accumulate
+        return;
+      }
+
+      // For current candidate, accumulate frame sample
+      const inside = isInsideButton(currentGaze.x, currentGaze.y, candidate);
+      windowBufferRef.current.push({ t: now, inside });
+
+      // Keep only samples within last T seconds
+      const cutoff = now - dwellWindowMs;
+      while (
+        windowBufferRef.current.length &&
+        windowBufferRef.current[0].t < cutoff
+      ) {
+        windowBufferRef.current.shift();
+      }
+
+      // Consecutive inside tracking
+      if (inside) {
+        consecutiveInsideRef.current += 1;
+      } else {
+        consecutiveInsideRef.current = 0;
+      }
+
+      // Occupancy ratio over the window
+      const total = windowBufferRef.current.length;
+      const insideCount = windowBufferRef.current.reduce(
+        (acc, s) => acc + (s.inside ? 1 : 0),
+        0
+      );
+      const occupancy = total > 0 ? insideCount / total : 0;
+
+      // Progress visualization is constrained by both conditions
+      const ratioA =
+        DEFAULT_THETA > 0 ? Math.min(1, occupancy / DEFAULT_THETA) : 1;
+      const ratioB = Math.min(
+        1,
+        consecutiveInsideRef.current / mFramesRequired
+      );
+      const progress = Math.min(ratioA, ratioB) * 100;
+      setDwellProgress(progress);
+
+      // Trigger only when both conditions are satisfied
+      if (
+        occupancy > DEFAULT_THETA &&
+        consecutiveInsideRef.current >= mFramesRequired
+      ) {
+        triggerButton(candidate);
+        // Reset state to avoid immediate re-trigger; require user to look away and back
+        trackingButtonIdRef.current = null;
+        windowBufferRef.current = [];
+        consecutiveInsideRef.current = 0;
+        setActiveButton(null);
+        setDwellProgress(0);
+      }
+    };
+
+    rafIdRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    };
+  }, [
+    isSessionActive,
+    gazePoint,
+    triggerButton,
+    findButtonAtPoint,
+    isInsideButton,
+  ]);
+
+  // Handle WebSocket messages from mapping endpoint
+  useEffect(() => {
+    if (gazeData && isSessionActive && !inputModeRef.current) {
+      // gazeData contains absolute pixel coordinates (e.g., 1920x1080 screen)
+      // Reference: x / 1920 * canvas.width, y / 1080 * canvas.height
+      // Normalize to percentage based on reference screen size (1920x1080)
+      const screenWidth = 1920;
+      const screenHeight = 1080;
+
+      const normalizedX = (gazeData.x / screenWidth) * 100;
+      const normalizedY = (gazeData.y / screenHeight) * 100;
+
+      // Clamp to 0-100 range
+      const clampedX = Math.max(0, Math.min(100, normalizedX));
+      const clampedY = Math.max(0, Math.min(100, normalizedY));
+
+      // Push raw sample and update smoothed UI point
+      pushRawGazeSample({
+        x: clampedX,
+        y: clampedY,
+        timestamp: gazeData.timestamp,
+      });
+    }
+  }, [gazeData, isSessionActive, pushRawGazeSample]);
 
   // Mouse simulation for development
   useEffect(() => {
     if (!isSessionActive || !useMouseSimulation) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const container = document.getElementById('gaze-container');
+      const container = document.getElementById("gaze-container");
       if (!container) return;
 
       const rect = container.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
-      
-      setGazePoint({ x, y, timestamp: Date.now() });
-      checkGazeInButtons(x, y);
+
+      // Push raw sample and update smoothed UI point
+      pushRawGazeSample({ x, y, timestamp: Date.now() });
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    
+    window.addEventListener("mousemove", handleMouseMove);
+
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener("mousemove", handleMouseMove);
     };
-  }, [isSessionActive, useMouseSimulation]);
+  }, [isSessionActive, useMouseSimulation, pushRawGazeSample]);
 
-  // Full screen handling
+  // Full screen handling - preserve input mode
   useEffect(() => {
     const handleFullScreenChange = () => {
       setIsFullScreen(!!document.fullscreenElement);
+      // Don't reset input mode when fullscreen changes
     };
 
-    document.addEventListener('fullscreenchange', handleFullScreenChange);
+    document.addEventListener("fullscreenchange", handleFullScreenChange);
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullScreenChange);
+      document.removeEventListener("fullscreenchange", handleFullScreenChange);
     };
   }, []);
 
@@ -161,11 +499,14 @@ const VoiceSession: React.FC = () => {
     if (!gazeContainerRef.current) return;
 
     if (!document.fullscreenElement) {
-      gazeContainerRef.current.requestFullscreen().then(() => {
-        setIsFullScreen(true);
-      }).catch(err => {
-        console.error('Error enabling full-screen:', err);
-      });
+      gazeContainerRef.current
+        .requestFullscreen()
+        .then(() => {
+          setIsFullScreen(true);
+        })
+        .catch((err) => {
+          console.error("Error enabling full-screen:", err);
+        });
     } else {
       document.exitFullscreen().then(() => {
         setIsFullScreen(false);
@@ -173,168 +514,111 @@ const VoiceSession: React.FC = () => {
     }
   }, []);
 
-  // Clear all timers
-  const clearAllTimers = useCallback(() => {
-    if (dwellTimerRef.current) {
-      clearTimeout(dwellTimerRef.current);
-      dwellTimerRef.current = null;
-    }
-    if (progressTimerRef.current) {
-      clearInterval(progressTimerRef.current);
-      progressTimerRef.current = null;
-    }
-  }, []);
-
-  // Check if gaze is inside any button
-  const checkGazeInButtons = useCallback((x: number, y: number) => {
-    let foundButton: VoiceButton | null = null;
-
-    for (const button of voiceButtons) {
-      const distance = Math.sqrt(
-        Math.pow(x - button.centerX, 2) + Math.pow(y - button.centerY, 2)
-      );
-      
-      if (distance <= button.radius) {
-        foundButton = button;
-        break;
+  // Check session status on mount
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const isActive = await eyeTrackingApi.checkSessionStatus();
+        setIsSessionActive(isActive);
+        // Don't reset input mode on mount - preserve user's choice
+      } catch (error) {
+        console.error("Failed to check session status:", error);
+        // Fallback to localStorage
+        const stored = localStorage.getItem("session_active");
+        const isActive = stored === "true";
+        setIsSessionActive(isActive);
       }
-    }
-
-    if (foundButton) {
-      if (activeButton === foundButton.id) {
-        return;
-      } else {
-        setActiveButton(foundButton.id);
-        startDwellTimer(foundButton);
-      }
-    } else {
-      if (activeButton) {
-        clearAllTimers();
-        setActiveButton(null);
-        setDwellProgress(0);
-      }
-    }
-  }, [activeButton, voiceButtons, clearAllTimers]);
-
-  // Start dwell timer for button
-  const startDwellTimer = useCallback((button: VoiceButton) => {
-    clearAllTimers();
-    setDwellProgress(0);
-
-    const startTime = Date.now();
-    const updateInterval = 50;
-
-    progressTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const progress = (elapsed / button.dwellTime) * 100;
-      setDwellProgress(Math.min(progress, 100));
-    }, updateInterval);
-
-    dwellTimerRef.current = setTimeout(() => {
-      triggerButton(button);
-      clearAllTimers();
-      setActiveButton(null);
-      setDwellProgress(0);
-    }, button.dwellTime);
-  }, [clearAllTimers]);
-
-  // Trigger button action
-  const triggerButton = useCallback((button: VoiceButton) => {
-    console.log(`Triggering button: ${button.label}`);
-    setLastPlayedAudio(button.label);
-    
-    // Increment usage count
-    incrementUsage(button.id);
-    
-    if (audioRef.current) {
-      audioRef.current.src = button.audioUrl;
-      audioRef.current.play().catch(error => {
-        console.error('Error playing audio:', error);
-        speakText(button.label);
-      });
-    } else {
-      speakText(button.label);
-    }
-
-    sendMessage({
-      type: 'button_triggered',
-      data: {
-        buttonId: button.id,
-        buttonLabel: button.label,
-        timestamp: Date.now(),
-        gazePoint: gazePoint
-      }
-    });
-  }, [sendMessage, gazePoint, incrementUsage]);
-
-  // Text-to-speech fallback
-  const speakText = useCallback((text: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'id-ID';
-      utterance.rate = 0.8;
-      speechSynthesis.speak(utterance);
-    }
+    };
+    checkStatus();
   }, []);
 
   // Session control functions
-  const startSession = () => {
-    setIsSessionActive(true);
-    setUseMouseSimulation(true);
-    
-    sendMessage({ 
-      type: 'start_voice_session',
-      data: { timestamp: Date.now() }
-    });
+  const startSession = async () => {
+    try {
+      await eyeTrackingApi.startSession();
+      setIsSessionActive(true);
+      // Don't reset input mode - preserve user's choice
+      localStorage.setItem("session_active", "true");
+
+      sendMessage({
+        type: "start_voice_session",
+        data: { timestamp: Date.now() },
+      });
+      showToast("Session started successfully", "success");
+    } catch (error) {
+      console.error("Failed to start session:", error);
+      showToast(
+        "Failed to start session. Please check if the backend is running.",
+        "error"
+      );
+    }
   };
 
-  const stopSession = () => {
-    setIsSessionActive(false);
-    clearAllTimers();
-    setActiveButton(null);
-    setDwellProgress(0);
-    setGazePoint(null);
-    
-    sendMessage({ 
-      type: 'stop_voice_session',
-      data: { timestamp: Date.now() }
-    });
+  const stopSession = async () => {
+    try {
+      await eyeTrackingApi.stopSession();
+      setIsSessionActive(false);
+      localStorage.setItem("session_active", "false");
+      setActiveButton(null);
+      setDwellProgress(0);
+      setGazePoint(null);
+
+      sendMessage({
+        type: "stop_voice_session",
+        data: { timestamp: Date.now() },
+      });
+      showToast("Session stopped successfully", "success");
+    } catch (error) {
+      console.error("Failed to stop session:", error);
+      showToast("Failed to stop session.", "error");
+    }
   };
 
-  const startCalibration = () => {
-    sendMessage({ 
-      type: 'start_calibration',
-      data: { timestamp: Date.now() }
-    });
+  const startCalibration = async () => {
+    try {
+      await eyeTrackingApi.calibrate();
+      showToast("Calibration started successfully", "success");
+    } catch (error) {
+      console.error("Failed to start calibration:", error);
+      showToast(
+        "Failed to start calibration. Please check if the backend is running.",
+        "error"
+      );
+    }
   };
 
   const toggleInputMode = () => {
-    setUseMouseSimulation(!useMouseSimulation);
-    if (!useMouseSimulation) {
-      sendMessage({ 
-        type: 'request_gaze_data',
-        data: { timestamp: Date.now() }
+    const newMode = !inputModeRef.current;
+    inputModeRef.current = newMode;
+    setUseMouseSimulation(newMode);
+
+    if (!newMode) {
+      // Switching to Device Mode - WebSocket will provide data automatically
+      sendMessage({
+        type: "request_gaze_data",
+        data: { timestamp: Date.now() },
       });
     }
   };
 
   const handleAddButton = () => {
     if (!newButtonConfig.label?.trim()) {
-      alert('Label is required');
+      showToast("Label is required", "warning");
       return;
     }
 
     addPhrase({
       text: newButtonConfig.label,
-      category: 'kebutuhan_dasar', // Default category
-      usageCount: 0,
-      lastUsed: null,
-      audioUrl: `/audio/${newButtonConfig.label.toLowerCase().replace(/\s+/g, '_')}.wav`
+      category: "kebutuhan_dasar", // Default category
+      audioUrl: `/audio/${newButtonConfig.label
+        .toLowerCase()
+        .replace(/\s+/g, "_")}.wav`,
+      color: newButtonConfig.color || "#3B82F6",
     });
 
     setNewButtonConfig({
-      label: '',
-      color: '#3B82F6'
+      label: "",
+      color: "#3B82F6",
     });
   };
 
@@ -343,22 +627,24 @@ const VoiceSession: React.FC = () => {
   };
 
   const handleExportConfig = () => {
-    const config = exportPhrases();
-    const blob = new Blob([config], { type: 'application/json' });
+    const config = JSON.stringify(phrases, null, 2);
+    const blob = new Blob([config], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `eyetalk2u-phrases-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `eyetalk2u-phrases-${
+      new Date().toISOString().split("T")[0]
+    }.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const handleResetToDefaults = () => {
-    resetPhrases();
+    reloadPhrases();
   };
 
   const getActiveButton = () => {
-    return voiceButtons.find(button => button.id === activeButton);
+    return voiceButtons.find((button) => button.id === activeButton);
   };
 
   const activeButtonData = getActiveButton();
@@ -373,26 +659,39 @@ const VoiceSession: React.FC = () => {
   }
 
   return (
-    <div className={`voice-session ${isFullScreen ? 'fullscreen' : ''}`}>
+    <div className={`voice-session ${isFullScreen ? "fullscreen" : ""}`}>
       {/* Header - Hidden in fullscreen */}
       {!isFullScreen && (
         <div className="session-header">
-                    
+          <div className="session-header-left">
+            <Link to="/" className="back-btn">
+              <ArrowLeft size={18} />
+              Back to Live Session
+            </Link>
+          </div>
           <div className="session-controls">
             <div className="connection-status">
-              <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`} />
-              {isConnected ? 'Connected' : 'Disconnected'}
+              <div
+                className={`status-indicator ${
+                  isConnected ? "connected" : "disconnected"
+                }`}
+              />
+              {isConnected ? "Connected" : "Disconnected"}
             </div>
-            
+
             <button
               onClick={toggleInputMode}
               className="control-btn secondary"
-              title={useMouseSimulation ? 'Using Mouse Simulation' : 'Using WebSocket Data'}
+              title={
+                useMouseSimulation
+                  ? "Using Mouse Simulation"
+                  : "Using Device Data"
+              }
             >
               <Eye size={16} />
-              {useMouseSimulation ? 'Mouse Mode' : 'WebSocket Mode'}
+              {useMouseSimulation ? "Mouse Mode" : "Device Mode"}
             </button>
-            
+
             <button
               onClick={() => setShowSettings(!showSettings)}
               className="control-btn secondary"
@@ -408,18 +707,17 @@ const VoiceSession: React.FC = () => {
               <Maximize2 size={16} />
               Full Screen
             </button>
-            
+
             <button
               onClick={isSessionActive ? stopSession : startSession}
-              className={`control-btn ${isSessionActive ? 'stop' : 'start'}`}
+              className={`control-btn ${isSessionActive ? "stop" : "start"}`}
             >
               {isSessionActive ? <Square size={20} /> : <Play size={20} />}
-              {isSessionActive ? 'Stop Session' : 'Start Session'}
+              {isSessionActive ? "Stop Session" : "Start Session"}
             </button>
-            
+
             <button
               onClick={startCalibration}
-              disabled={!isConnected}
               className="control-btn secondary"
             >
               <RotateCcw size={20} />
@@ -431,15 +729,15 @@ const VoiceSession: React.FC = () => {
 
       <div className="session-content">
         {/* Main Gaze Container */}
-        <div 
-          className="gaze-container" 
+        <div
+          className="gaze-container"
           id="gaze-container"
           ref={gazeContainerRef}
         >
           {/* Full Screen Controls */}
           {isFullScreen && (
             <div className="fullscreen-controls">
-              <button 
+              <button
                 className="control-btn secondary"
                 onClick={toggleFullScreen}
               >
@@ -448,10 +746,10 @@ const VoiceSession: React.FC = () => {
               </button>
               <button
                 onClick={isSessionActive ? stopSession : startSession}
-                className={`control-btn ${isSessionActive ? 'stop' : 'start'}`}
+                className={`control-btn ${isSessionActive ? "stop" : "start"}`}
               >
                 {isSessionActive ? <Square size={20} /> : <Play size={20} />}
-                {isSessionActive ? 'Stop' : 'Start'}
+                {isSessionActive ? "Stop" : "Start"}
               </button>
             </div>
           )}
@@ -460,24 +758,34 @@ const VoiceSession: React.FC = () => {
           {voiceButtons.map((button) => (
             <div
               key={button.id}
-              className={`voice-button circular ${activeButton === button.id ? 'active' : ''}`}
+              className={`voice-button circular ${
+                activeButton === button.id ? "active" : ""
+              }`}
               style={{
                 left: `${button.centerX}%`,
                 top: `${button.centerY}%`,
                 width: `${button.radius * 2}%`,
                 backgroundColor: button.color,
-                transform: 'translate(-50%, -50%)'
+                transform: "translate(-50%, -50%)",
               }}
             >
-              <div className="button-label">{button.label}</div>
-              
+              <div
+                className="button-label"
+                style={{
+                  fontSize: `clamp(14px, ${button.radius * 0.25}vmin, 36px)`,
+                  lineHeight: 1.15,
+                }}
+              >
+                {button.label}
+              </div>
+
               {/* Dwell Progress Indicator */}
               {activeButton === button.id && (
-                <div 
+                <div
                   className="dwell-progress"
-                  style={{ 
+                  style={{
                     width: `${dwellProgress}%`,
-                    backgroundColor: button.color
+                    backgroundColor: button.color,
                   }}
                 />
               )}
@@ -497,8 +805,9 @@ const VoiceSession: React.FC = () => {
 
           {/* Input Mode Indicator */}
           <div className="input-mode-indicator">
-            Mode: {useMouseSimulation ? 'Mouse Simulation' : 'WebSocket Data'}
-            {!isConnected && useMouseSimulation && ' (Fallback)'}
+            Mode: {useMouseSimulation ? "Mouse Simulation" : "Device Data"}
+            {!isConnected && !useMouseSimulation && " (Disconnected)"}
+            {!isConnected && useMouseSimulation && " (Fallback)"}
           </div>
 
           {/* Session Status Overlay */}
@@ -509,8 +818,14 @@ const VoiceSession: React.FC = () => {
                 <h3>Session Not Active</h3>
                 <p>Click "Start Session" to begin the voice session.</p>
                 <div className="overlay-info">
-                  <p><strong>WebSocket Status:</strong> {isConnected ? 'Connected' : 'Disconnected'}</p>
-                  <p><strong>Current Mode:</strong> {useMouseSimulation ? 'Mouse Simulation' : 'WebSocket Data'}</p>
+                  <p>
+                    <strong>WebSocket Status:</strong>{" "}
+                    {isConnected ? "Connected" : "Disconnected"}
+                  </p>
+                  <p>
+                    <strong>Current Mode:</strong>{" "}
+                    {useMouseSimulation ? "Mouse Simulation" : "Device Data"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -522,45 +837,56 @@ const VoiceSession: React.FC = () => {
           <div className="settings-panel">
             <div className="panel-section">
               <h3>Manage Voice Buttons</h3>
-              
-            {/* Add New Button Form */}
-            <div className="add-button-form">
-              <h4>Change Button</h4>
-              <div className="form-row">
-                <input
-                  type="text"
-                  placeholder="Button Label"
-                  value={newButtonConfig.label}
-                  onChange={(e) => setNewButtonConfig(prev => ({ ...prev, label: e.target.value }))}
-                />
-                <input
-                  type="color"
-                  value={newButtonConfig.color}
-                  onChange={(e) => setNewButtonConfig(prev => ({ ...prev, color: e.target.value }))}
-                />
+
+              {/* Add New Button Form */}
+              <div className="add-button-form">
+                <h4>Change Button</h4>
+                <div className="form-row">
+                  <input
+                    type="text"
+                    placeholder="Button Label"
+                    value={newButtonConfig.label}
+                    onChange={(e) =>
+                      setNewButtonConfig((prev) => ({
+                        ...prev,
+                        label: e.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    type="color"
+                    value={newButtonConfig.color}
+                    onChange={(e) =>
+                      setNewButtonConfig((prev) => ({
+                        ...prev,
+                        color: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <button onClick={handleAddButton} className="btn primary">
+                  <Plus size={16} />
+                  Add Button
+                </button>
               </div>
-              <button onClick={handleAddButton} className="btn primary">
-                <Plus size={16} />
-                Add Button
-              </button>
-            </div>
 
               {/* Existing Buttons List */}
               <div className="buttons-list">
                 <h4>Existing Buttons</h4>
-                {voiceButtons.map(button => (
+                {voiceButtons.map((button) => (
                   <div key={button.id} className="button-item">
-                    <div 
+                    <div
                       className="button-preview"
                       style={{ backgroundColor: button.color }}
                     />
                     <div className="button-info">
                       <strong>{button.label}</strong>
-                      <span>Pos: {button.centerX}%, {button.centerY}%</span>
+                      <span>
+                        Pos: {button.centerX}%, {button.centerY}%
+                      </span>
                       <span>Radius: {button.radius}%</span>
-                      <span>Dwell: {button.dwellTime}ms</span>
                     </div>
-                    <button 
+                    <button
                       onClick={() => handleDeleteButton(button.id)}
                       className="btn danger"
                     >
@@ -576,7 +902,10 @@ const VoiceSession: React.FC = () => {
                   <Download size={16} />
                   Export Config
                 </button>
-                <button onClick={handleResetToDefaults} className="btn secondary">
+                <button
+                  onClick={handleResetToDefaults}
+                  className="btn secondary"
+                >
                   <Save size={16} />
                   Reset to Defaults
                 </button>
@@ -593,32 +922,40 @@ const VoiceSession: React.FC = () => {
               <div className="status-grid">
                 <div className="status-item">
                   <span className="label">Status:</span>
-                  <span className={`value ${isSessionActive ? 'active' : 'inactive'}`}>
-                    {isSessionActive ? 'Active' : 'Inactive'}
+                  <span
+                    className={`value ${
+                      isSessionActive ? "active" : "inactive"
+                    }`}
+                  >
+                    {isSessionActive ? "Active" : "Inactive"}
                   </span>
                 </div>
                 <div className="status-item">
                   <span className="label">WebSocket:</span>
-                  <span className={`value ${isConnected ? 'connected' : 'disconnected'}`}>
-                    {isConnected ? 'Connected' : 'Disconnected'}
+                  <span
+                    className={`value ${
+                      isConnected ? "connected" : "disconnected"
+                    }`}
+                  >
+                    {isConnected ? "Connected" : "Disconnected"}
                   </span>
                 </div>
                 <div className="status-item">
                   <span className="label">Input Mode:</span>
                   <span className="value">
-                    {useMouseSimulation ? 'Mouse' : 'WebSocket'}
+                    {useMouseSimulation ? "Mouse" : "WebSocket"}
                   </span>
                 </div>
                 <div className="status-item">
                   <span className="label">Active Button:</span>
                   <span className="value">
-                    {activeButtonData ? activeButtonData.label : 'None'}
+                    {activeButtonData ? activeButtonData.label : "None"}
                   </span>
                 </div>
                 <div className="status-item">
                   <span className="label">Progress:</span>
                   <span className="value">
-                    {activeButtonData ? `${Math.round(dwellProgress)}%` : '0%'}
+                    {activeButtonData ? `${Math.round(dwellProgress)}%` : "0%"}
                   </span>
                 </div>
               </div>
@@ -642,7 +979,9 @@ const VoiceSession: React.FC = () => {
                 <div className="gaze-data">
                   <div>X: {gazePoint.x.toFixed(1)}%</div>
                   <div>Y: {gazePoint.y.toFixed(1)}%</div>
-                  <div>Time: {new Date(gazePoint.timestamp).toLocaleTimeString()}</div>
+                  <div>
+                    Time: {new Date(gazePoint.timestamp).toLocaleTimeString()}
+                  </div>
                 </div>
               ) : (
                 <p className="no-gaze">No gaze data</p>
@@ -652,14 +991,13 @@ const VoiceSession: React.FC = () => {
             <div className="panel-section">
               <h3>Button Configuration</h3>
               <div className="buttons-config">
-                {voiceButtons.map(button => (
+                {voiceButtons.map((button) => (
                   <div key={button.id} className="button-config-item">
-                    <div 
+                    <div
                       className="color-indicator"
                       style={{ backgroundColor: button.color }}
                     />
                     <span className="button-name">{button.label}</span>
-                    <span className="dwell-time">{button.dwellTime}ms</span>
                   </div>
                 ))}
               </div>
@@ -669,11 +1007,7 @@ const VoiceSession: React.FC = () => {
       </div>
 
       {/* Hidden Audio Element */}
-      <audio 
-        ref={audioRef} 
-        preload="auto"
-        style={{ display: 'none' }}
-      />
+      <audio ref={audioRef} preload="auto" style={{ display: "none" }} />
     </div>
   );
 };

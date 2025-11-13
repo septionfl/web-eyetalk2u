@@ -1,8 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, Download, Upload, RefreshCw } from 'lucide-react';
-import { Phrase } from '../../types';
-import { usePhrasesStorage } from '../../hooks/useLocalStorage';
-import './Phrases.css';
+import React, { useState, useEffect } from "react";
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Search,
+  Download,
+  Upload,
+  RefreshCw,
+} from "lucide-react";
+import { type Phrase } from "../../types";
+import { usePhrasesStorage } from "../../hooks/useLocalStorage";
+import "./Phrases.css";
 
 const Phrases: React.FC = () => {
   const {
@@ -12,48 +20,58 @@ const Phrases: React.FC = () => {
     updatePhrase,
     deletePhrase,
     getCategories,
-    reloadPhrases
+    reloadPhrases,
   } = usePhrasesStorage();
 
   const [filteredPhrases, setFilteredPhrases] = useState<Phrase[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPhrase, setEditingPhrase] = useState<Phrase | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState("all");
 
   // Default categories
   const defaultCategories = [
-    'basic_need',
-    'medical', 
-    'comfort',
-    'help',
-    'emergency'
+    "basic_need",
+    "medical",
+    "comfort",
+    "help",
+    "emergency",
   ];
 
   // Get all available categories (combine default and existing)
-  const allCategories = [...new Set([...defaultCategories, ...getCategories()])];
+  const allCategories = [
+    ...new Set([...defaultCategories, ...getCategories()]),
+  ];
 
   // Filter phrases based on search and category
   useEffect(() => {
     let filtered = phrases;
 
     if (searchTerm) {
-      filtered = filtered.filter(phrase =>
-        phrase.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        phrase.category.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(
+        (phrase) =>
+          phrase.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          phrase.category.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(phrase => phrase.category === selectedCategory);
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter(
+        (phrase) => phrase.category === selectedCategory
+      );
     }
 
     setFilteredPhrases(filtered);
   }, [searchTerm, selectedCategory, phrases]);
 
-  const handleSavePhrase = (phraseData: Omit<Phrase, 'id' | 'createdAt' | 'usageCount'>) => {
+  const handleSavePhrase = (
+    phraseData: Omit<Phrase, "id" | "createdAt" | "usageCount">
+  ) => {
     if (editingPhrase) {
-      updatePhrase(editingPhrase.id, phraseData);
+      updatePhrase(editingPhrase.id, {
+        ...phraseData,
+        color: editingPhrase.color,
+      });
     } else {
       addPhrase(phraseData);
     }
@@ -62,14 +80,14 @@ const Phrases: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure want to delete this phrase?')) {
+    if (window.confirm("Are you sure want to delete this phrase?")) {
       deletePhrase(id);
     }
   };
 
   const handleDeploy = () => {
     // Send phrases to devices
-    console.log('Deploying phrases to devices...', phrases);
+    console.log("Deploying phrases to devices...", phrases);
     alert(`Successfully deployed ${phrases.length} phrases to devices!`);
   };
 
@@ -82,42 +100,45 @@ const Phrases: React.FC = () => {
       try {
         const content = e.target?.result as string;
         const importedPhrases: Phrase[] = JSON.parse(content);
-        
+
         // Validate and add imported phrases
-        importedPhrases.forEach(phrase => {
+        importedPhrases.forEach((phrase) => {
           if (phrase.text && phrase.category) {
             addPhrase({
               text: phrase.text,
               category: phrase.category,
-              audioUrl: phrase.audioUrl
+              audioUrl: phrase.audioUrl,
+              color: phrase.color,
             });
           }
         });
-        
+
         alert(`Successfully imported ${importedPhrases.length} phrases.`);
       } catch (error) {
-        alert('Error importing phrases.');
-        console.error('Import error:', error);
+        alert("Error importing phrases.");
+        console.error("Import error:", error);
       }
     };
     reader.readAsText(file);
-    event.target.value = ''; // Reset input
+    event.target.value = ""; // Reset input
   };
 
   const handleExport = () => {
     const dataStr = JSON.stringify(phrases, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
+    const blob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.download = `eyetalk2u-phrases-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `eyetalk2u-phrases-${
+      new Date().toISOString().split("T")[0]
+    }.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
   const clearAllPhrases = () => {
-    if (window.confirm('Do you want to clear all phrases?')) {
-      phrases.forEach(phrase => deletePhrase(phrase.id));
+    if (window.confirm("Do you want to clear all phrases?")) {
+      phrases.forEach((phrase) => deletePhrase(phrase.id));
     }
   };
 
@@ -155,7 +176,7 @@ const Phrases: React.FC = () => {
               type="file"
               accept=".json"
               onChange={handleImport}
-              style={{ display: 'none' }}
+              style={{ display: "none" }}
             />
           </label>
           <button className="btn primary" onClick={() => setIsModalOpen(true)}>
@@ -189,13 +210,13 @@ const Phrases: React.FC = () => {
             className="category-filter"
           >
             <option value="all">All Categories</option>
-            {allCategories.map(category => (
+            {allCategories.map((category) => (
               <option key={category} value={category}>
                 {category}
               </option>
             ))}
           </select>
-          <button 
+          <button
             onClick={reloadPhrases}
             className="btn icon"
             title="Refresh data"
@@ -238,7 +259,7 @@ const Phrases: React.FC = () => {
                     <span className="usage-count">{phrase.usageCount}</span>
                   </td>
                   <td className="created-date">
-                    {phrase.createdAt.toLocaleDateString('id-ID')}
+                    {phrase.createdAt.toLocaleDateString("id-ID")}
                   </td>
                   <td>
                     <div className="action-buttons">
@@ -265,7 +286,7 @@ const Phrases: React.FC = () => {
               ))}
             </tbody>
           </table>
-          
+
           {filteredPhrases.length === 0 && (
             <div className="empty-filter">
               <p>No phrases found.</p>
@@ -313,9 +334,9 @@ const PhraseModal: React.FC<{
   onClose: () => void;
 }> = ({ phrase, categories, onSave, onClose }) => {
   const [formData, setFormData] = useState({
-    text: phrase?.text || '',
-    category: phrase?.category || 'basic_need',
-    audioUrl: phrase?.audioUrl || ''
+    text: phrase?.text || "",
+    category: phrase?.category || "basic_need",
+    audioUrl: phrase?.audioUrl || "",
   });
 
   const [errors, setErrors] = useState<{ text?: string }>({});
@@ -323,7 +344,7 @@ const PhraseModal: React.FC<{
   const validateForm = () => {
     const newErrors: { text?: string } = {};
     if (!formData.text.trim()) {
-      newErrors.text = 'Phrase text is required.';
+      newErrors.text = "Phrase text is required.";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -339,51 +360,57 @@ const PhraseModal: React.FC<{
   return (
     <div className="modal-overlay">
       <div className="modal">
-        <h2>{phrase ? 'Edit Phrase' : 'Add New Phrase'}</h2>
+        <h2>{phrase ? "Edit Phrase" : "Add New Phrase"}</h2>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Phrase Text *</label>
             <textarea
               value={formData.text}
-              onChange={(e) => setFormData({ ...formData, text: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, text: e.target.value })
+              }
               placeholder="Enter phrase text..."
               rows={3}
-              className={errors.text ? 'error' : ''}
+              className={errors.text ? "error" : ""}
             />
             {errors.text && <span className="error-text">{errors.text}</span>}
           </div>
-          
+
           <div className="form-group">
             <label>Category</label>
             <select
               value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, category: e.target.value })
+              }
             >
-              {categories.map(category => (
+              {categories.map((category) => (
                 <option key={category} value={category}>
                   {category}
                 </option>
               ))}
             </select>
           </div>
-          
+
           <div className="form-group">
             <label>Audio URL (Optional)</label>
             <input
               type="url"
               value={formData.audioUrl}
-              onChange={(e) => setFormData({ ...formData, audioUrl: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, audioUrl: e.target.value })
+              }
               placeholder="https://example.com/audio.mp3"
             />
             <small>URL for audio file</small>
           </div>
-          
+
           <div className="modal-actions">
             <button type="button" onClick={onClose} className="btn secondary">
               Cancel
             </button>
             <button type="submit" className="btn primary">
-              {phrase ? 'Update' : 'Create'} Phrase
+              {phrase ? "Update" : "Create"} Phrase
             </button>
           </div>
         </form>

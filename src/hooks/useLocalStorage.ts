@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Phrase, AppStorage } from '../types';
+import { useState, useEffect } from "react";
+import { type Phrase, type AppStorage } from "../types";
 
 export const useLocalStorage = () => {
-  const STORAGE_KEY = 'eyetalk2u_data';
+  const STORAGE_KEY = "eyetalk2u_data";
 
   // Get initial data from localStorage
   const getStoredData = (): AppStorage => {
@@ -12,13 +12,13 @@ export const useLocalStorage = () => {
         return JSON.parse(stored);
       }
     } catch (error) {
-      console.error('Error reading from localStorage:', error);
+      console.error("Error reading from localStorage:", error);
     }
-    
+
     // Return default data structure
     return {
       phrases: [],
-      lastUsedCategories: []
+      lastUsedCategories: [],
     };
   };
 
@@ -27,13 +27,13 @@ export const useLocalStorage = () => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (error) {
-      console.error('Error saving to localStorage:', error);
+      console.error("Error saving to localStorage:", error);
     }
   };
 
   return {
     getStoredData,
-    saveStoredData
+    saveStoredData,
   };
 };
 
@@ -51,9 +51,9 @@ export const usePhrasesStorage = () => {
   const loadPhrases = () => {
     const data = getStoredData();
     // Convert date strings back to Date objects
-    const phrasesWithDates = data.phrases.map(phrase => ({
+    const phrasesWithDates = data.phrases.map((phrase) => ({
       ...phrase,
-      createdAt: new Date(phrase.createdAt)
+      createdAt: new Date(phrase.createdAt),
     }));
     setPhrases(phrasesWithDates);
     setIsLoading(false);
@@ -66,44 +66,46 @@ export const usePhrasesStorage = () => {
     saveStoredData(data);
   };
 
-  const addPhrase = (phrase: Omit<Phrase, 'id' | 'createdAt' | 'usageCount'>) => {
+  const addPhrase = (
+    phrase: Omit<Phrase, "id" | "createdAt" | "usageCount">
+  ) => {
     const newPhrase: Phrase = {
       ...phrase,
       id: Date.now().toString(),
       usageCount: 0,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
-    
+
     const newPhrases = [...phrases, newPhrase];
     savePhrases(newPhrases);
     return newPhrase;
   };
 
   const updatePhrase = (id: string, updates: Partial<Phrase>) => {
-    const newPhrases = phrases.map(phrase =>
+    const newPhrases = phrases.map((phrase) =>
       phrase.id === id ? { ...phrase, ...updates } : phrase
     );
     savePhrases(newPhrases);
   };
 
   const deletePhrase = (id: string) => {
-    const newPhrases = phrases.filter(phrase => phrase.id !== id);
+    const newPhrases = phrases.filter((phrase) => phrase.id !== id);
     savePhrases(newPhrases);
   };
 
   const incrementUsage = (id: string) => {
-    const phrase = phrases.find(p => p.id === id);
+    const phrase = phrases.find((p) => p.id === id);
     if (phrase) {
       updatePhrase(id, { usageCount: phrase.usageCount + 1 });
     }
   };
 
   const getPhrasesByCategory = (category: string) => {
-    return phrases.filter(phrase => phrase.category === category);
+    return phrases.filter((phrase) => phrase.category === category);
   };
 
   const getCategories = () => {
-    const categories = [...new Set(phrases.map(phrase => phrase.category))];
+    const categories = [...new Set(phrases.map((phrase) => phrase.category))];
     return categories.sort();
   };
 
@@ -116,6 +118,6 @@ export const usePhrasesStorage = () => {
     incrementUsage,
     getPhrasesByCategory,
     getCategories,
-    reloadPhrases: loadPhrases
+    reloadPhrases: loadPhrases,
   };
 };

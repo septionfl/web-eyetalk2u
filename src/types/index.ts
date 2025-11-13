@@ -2,13 +2,13 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'operator' | 'viewer';
+  role: "admin" | "operator" | "viewer";
 }
 
 export interface Device {
   id: string;
   name: string;
-  status: 'connected' | 'disconnected' | 'calibrating';
+  status: "connected" | "disconnected" | "calibrating";
   patientId?: string;
   lastActive: Date;
 }
@@ -20,6 +20,7 @@ export interface Phrase {
   usageCount: number;
   createdAt: Date;
   audioUrl?: string;
+  color?: string;
 }
 
 export interface AppStorage {
@@ -33,7 +34,7 @@ export interface Session {
   patientId: string;
   startTime: Date;
   endTime?: Date;
-  calibrationStatus: 'pending' | 'completed' | 'failed';
+  calibrationStatus: "pending" | "completed" | "failed";
   phrasesUsed: string[];
 }
 
@@ -44,5 +45,5 @@ export interface LogEntry {
   patientId: string;
   phrase: string;
   audioUrl?: string;
-  type: 'phrase_selected' | 'calibration' | 'system';
+  type: "phrase_selected" | "calibration" | "system";
 }

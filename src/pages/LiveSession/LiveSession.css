@@ -5,6 +5,9 @@
   flex-direction: column;
   gap: var(--space-6);
   background: var(--gray-50);
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
 }
 
 /* Session Header */
@@ -51,8 +54,13 @@
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* Session Content Layout */
@@ -83,6 +91,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  max-width: 100%;
+  width: 100%;
+}
+
+.video-container img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 .video-placeholder {
@@ -96,31 +114,6 @@
 
 .video-placeholder svg {
   opacity: 0.5;
-}
-
-.gaze-cursor {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--primary-500);
-  border-radius: 50%;
-  background: rgba(102, 126, 234, 0.3);
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  transition: all 0.1s ease-out;
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-}
-
-.gaze-cursor::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 4px;
-  height: 4px;
-  background: var(--primary-500);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
 }
 
 /* Session Controls */
@@ -261,6 +254,72 @@
   color: var(--success-600);
 }
 
+/* Camera Control Section */
+.camera-control-section {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--gray-200);
+}
+
+.camera-control-section h4 {
+  color: var(--gray-900);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  margin: 0 0 var(--space-4) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.camera-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.camera-input-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.camera-input-item label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--gray-700);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.camera-input-wrapper {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.camera-input {
+  flex: 1;
+  padding: var(--space-3);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  background: white;
+  transition: var(--transition);
+}
+
+.camera-input:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.control-btn.small {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
 /* Phrases Section */
 .phrases-section {
   background: white;
@@ -311,7 +370,7 @@
   .session-content {
     grid-template-columns: 1fr;
   }
-  
+
   .status-section {
     order: 2;
   }
@@ -322,38 +381,52 @@
     padding: var(--space-4);
     gap: var(--space-4);
   }
-  
+
   .session-header {
     flex-direction: column;
     gap: var(--space-3);
     align-items: flex-start;
   }
-  
+
   .session-controls {
     flex-direction: column;
     width: 100%;
   }
-  
+
   .control-btn {
     justify-content: center;
   }
-  
+
   .phrase-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .video-section,
   .status-section,
   .phrases-section {
     padding: var(--space-4);
   }
+
+  .camera-input-wrapper {
+    flex-direction: column;
+  }
+
+  .camera-input-wrapper .control-btn {
+    width: 100%;
+  }
 }
 
 /* Animation for gaze tracking */
 @keyframes gaze-move {
-  0% { transform: translate(-50%, -50%) scale(1); }
-  50% { transform: translate(-50%, -50%) scale(1.1); }
-  100% { transform: translate(-50%, -50%) scale(1); }
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 .gaze-cursor.moving {
@@ -374,12 +447,17 @@
 }
 
 @keyframes target-pulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); }
-  50% { transform: translate(-50%, -50%) scale(1.2); }
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.2);
+  }
 }
 
 .calibration-target::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
