@@ -14,6 +14,8 @@ import {
   Download,
   ArrowLeft,
   RotateCcw,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import { usePhrasesStorage } from "../../hooks/useLocalStorage";
@@ -45,6 +47,7 @@ interface VoiceButton {
   centerY: number;
   radius: number;
   color: string;
+  type?: "standard" | "lock";
 }
 
 const VoiceSession: React.FC = () => {
@@ -67,6 +70,7 @@ const VoiceSession: React.FC = () => {
     label: "",
     color: "#3B82F6",
   });
+  const [isScreenLocked, setIsScreenLocked] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const gazeContainerRef = useRef<HTMLDivElement>(null);
@@ -113,6 +117,7 @@ const VoiceSession: React.FC = () => {
           centerY: 50,
           radius: 24,
           color,
+          type: "standard",
         },
       ];
     }
@@ -130,6 +135,7 @@ const VoiceSession: React.FC = () => {
         centerY: positions[index].y,
         radius: 20,
         color: phrase.color || getColorByCategory(phrase.category),
+        type: "standard",
       }));
     }
 
@@ -147,6 +153,7 @@ const VoiceSession: React.FC = () => {
         centerY: positions[index].y,
         radius: 12,
         color: phrase.color || getColorByCategory(phrase.category),
+        type: "standard",
       }));
     }
 
@@ -166,6 +173,7 @@ const VoiceSession: React.FC = () => {
         centerY: positions[index].y,
         radius: 12,
         color: phrase.color || getColorByCategory(phrase.category),
+        type: "standard",
       }));
     }
 
@@ -205,9 +213,24 @@ const VoiceSession: React.FC = () => {
         centerY,
         radius: computedRadius,
         color: phrase.color || getColorByCategory(phrase.category),
+        type: "standard",
       };
     });
   }, [phrases]);
+
+  const lockControlButton: VoiceButton = React.useMemo(
+    () => ({
+      id: isScreenLocked ? "unlock-control" : "lock-control",
+      label: isScreenLocked ? "Open" : "Lock",
+      audioUrl: "",
+      centerX: 50,
+      centerY: 96,
+      radius: isScreenLocked ? 14 : 12,
+      color: isScreenLocked ? "#16a34a" : "#111827",
+      type: "lock",
+    }),
+    [isScreenLocked]
+  );
 
   // =========================
   // Eye-Tracking State/Refs
@@ -237,6 +260,27 @@ const VoiceSession: React.FC = () => {
   // Trigger button action
   const triggerButton = useCallback(
     (button: VoiceButton) => {
+      if (button.type === "lock") {
+        setIsScreenLocked((prev) => {
+          const nextState = !prev;
+          sendMessage({
+            type: "lock_toggle",
+            data: {
+              locked: nextState,
+              timestamp: Date.now(),
+            },
+          });
+          showToast(nextState ? "Screen locked" : "Screen unlocked", "info");
+          return nextState;
+        });
+        setActiveButton(null);
+        setDwellProgress(0);
+        trackingButtonIdRef.current = null;
+        windowBufferRef.current = [];
+        consecutiveInsideRef.current = 0;
+        return;
+      }
+
       console.log(`Triggering button: ${button.label}`);
       setLastPlayedAudio(button.label);
 
@@ -263,7 +307,7 @@ const VoiceSession: React.FC = () => {
         },
       });
     },
-    [sendMessage, gazePoint, incrementUsage, speakText]
+    [sendMessage, gazePoint, incrementUsage, speakText, showToast]
   );
 
   // =========================
@@ -281,12 +325,15 @@ const VoiceSession: React.FC = () => {
 
   const findButtonAtPoint = useCallback(
     (x: number, y: number): VoiceButton | null => {
-      for (const button of voiceButtons) {
+      const interactableButtons = isScreenLocked
+        ? [lockControlButton]
+        : [...voiceButtons, lockControlButton];
+      for (const button of interactableButtons) {
         if (isInsideButton(x, y, button)) return button;
       }
       return null;
     },
-    [voiceButtons, isInsideButton]
+    [voiceButtons, lockControlButton, isInsideButton, isScreenLocked]
   );
 
   // =========================
@@ -537,6 +584,7 @@ const VoiceSession: React.FC = () => {
     try {
       await eyeTrackingApi.startSession();
       setIsSessionActive(true);
+      setIsScreenLocked(false);
       // Don't reset input mode - preserve user's choice
       localStorage.setItem("session_active", "true");
 
@@ -558,6 +606,7 @@ const VoiceSession: React.FC = () => {
     try {
       await eyeTrackingApi.stopSession();
       setIsSessionActive(false);
+      setIsScreenLocked(false);
       localStorage.setItem("session_active", "false");
       setActiveButton(null);
       setDwellProgress(0);
@@ -644,6 +693,9 @@ const VoiceSession: React.FC = () => {
   };
 
   const getActiveButton = () => {
+    if (activeButton === lockControlButton.id) {
+      return lockControlButton;
+    }
     return voiceButtons.find((button) => button.id === activeButton);
   };
 
@@ -792,6 +844,34 @@ const VoiceSession: React.FC = () => {
             </div>
           ))}
 
+          {/* Lock Control Button */}
+          <div
+            className={`lock-control-button ${isScreenLocked ? "locked" : ""} ${
+              activeButton === lockControlButton.id ? "active" : ""
+            }`}
+            style={{
+              left: `${lockControlButton.centerX}%`,
+              top: `${isFullScreen ? 90 : lockControlButton.centerY}%`,
+              width: `${lockControlButton.radius * 2}%`,
+              transform: "translate(-50%, -50%)",
+              backgroundColor: lockControlButton.color,
+              aspectRatio: "2 / 1",
+            }}
+          >
+            <div className="lock-control-content">
+              <div className="lock-icon-wrapper">
+                {isScreenLocked ? <Unlock size={24} /> : <Lock size={24} />}
+              </div>
+              <span className="lock-label">{lockControlButton.label}</span>
+            </div>
+            {activeButton === lockControlButton.id && (
+              <div
+                className="dwell-progress lock-progress"
+                style={{ width: `${dwellProgress}%` }}
+              />
+            )}
+          </div>
+
           {/* Gaze Point Indicator */}
           {gazePoint && isSessionActive && (
             <div
@@ -827,6 +907,17 @@ const VoiceSession: React.FC = () => {
                     {useMouseSimulation ? "Mouse Simulation" : "Device Data"}
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Lock Screen Overlay */}
+          {isScreenLocked && (
+            <div className="lock-screen-overlay">
+              <div className="lock-screen-message">
+                <Lock size={40} />
+                <h3>Screen Locked</h3>
+                <p>Look at "Open" to unlock.</p>
               </div>
             </div>
           )}
