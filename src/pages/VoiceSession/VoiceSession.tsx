@@ -46,19 +46,17 @@ const VoiceSession: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const gazeContainerRef = useRef<HTMLDivElement>(null);
   
-  const { lastMessage, sendMessage, isConnected } = useWebSocket();
+  const { gazeData, sendMessage, isConnected } = useWebSocket();
   const { 
     phrases, 
     isLoading, 
     addPhrase, 
     updatePhrase, 
     deletePhrase, 
-    resetPhrases,
-    exportPhrases,
+    reloadPhrases,
     incrementUsage 
   } = usePhrasesStorage();
 
-  // Helper function untuk menentukan warna berdasarkan kategori
   const getColorByCategory = (category: string): string => {
     const colorMap: { [key: string]: string } = {
       'kebutuhan_dasar': '#3B82F6', // Blue
@@ -71,7 +69,6 @@ const VoiceSession: React.FC = () => {
     return colorMap[category] || '#6B7280'; // Gray default
   };
 
-  // Konversi phrases menjadi voiceButtons
   const voiceButtons: VoiceButton[] = phrases.map((phrase, index) => {
     // Position buttons in a grid
     const positions = [
@@ -98,12 +95,12 @@ const VoiceSession: React.FC = () => {
 
   // Handle WebSocket messages
   useEffect(() => {
-    if (lastMessage && isSessionActive) {
-      console.log('WebSocket message received:', lastMessage);
+    if (gazeData && isSessionActive) {
+      console.log('WebSocket message received:', gazeData);
       
-      switch (lastMessage.type) {
+      switch (gazeData.type) {
         case 'gaze_data':
-          const { x, y, timestamp } = lastMessage.data;
+          const { x, y, timestamp } = gazeData.data;
           const normalizedX = Math.max(0, Math.min(100, x));
           const normalizedY = Math.max(0, Math.min(100, y));
           
@@ -120,7 +117,7 @@ const VoiceSession: React.FC = () => {
           break;
       }
     }
-  }, [lastMessage, isSessionActive]);
+  }, [gazeData, isSessionActive]);
 
   // Mouse simulation for development
   useEffect(() => {
@@ -343,8 +340,7 @@ const VoiceSession: React.FC = () => {
   };
 
   const handleExportConfig = () => {
-    const config = exportPhrases();
-    const blob = new Blob([config], { type: 'application/json' });
+    const blob = new Blob({ type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -354,7 +350,7 @@ const VoiceSession: React.FC = () => {
   };
 
   const handleResetToDefaults = () => {
-    resetPhrases();
+    reloadPhrases();
   };
 
   const getActiveButton = () => {

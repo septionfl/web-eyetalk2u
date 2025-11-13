@@ -115,12 +115,6 @@ const Phrases: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const clearAllPhrases = () => {
-    if (window.confirm('Do you want to clear all phrases?')) {
-      phrases.forEach(phrase => deletePhrase(phrase.id));
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="phrases-page">
@@ -271,22 +265,6 @@ const Phrases: React.FC = () => {
               <p>No phrases found.</p>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Danger Zone */}
-      {phrases.length > 0 && (
-        <div className="danger-zone">
-          <h3>Danger Zone</h3>
-          <div className="danger-actions">
-            <button onClick={clearAllPhrases} className="btn danger">
-              <Trash2 size={16} />
-              Delete All Phrases
-            </button>
-            <p className="warning-text">
-              This will permanently delete all phrases and cannot be undone.
-            </p>
-          </div>
         </div>
       )}
 
