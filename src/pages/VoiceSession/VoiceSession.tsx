@@ -21,6 +21,7 @@ import { useWebSocket } from "../../hooks/useWebSocket";
 import { usePhrasesStorage } from "../../hooks/useLocalStorage";
 import { eyeTrackingApi } from "../../services/eyeTrackingApi";
 import { useToast } from "../../contexts/ToastContext";
+import { speak } from "../../services/textToSpeech";
 import "./VoiceSession.css";
 
 interface GazePoint {
@@ -38,6 +39,7 @@ const DEFAULT_FPS = 24; // F
 const DEFAULT_THETA = 0.8; // θ
 const DEFAULT_CONSEC_MS = 1500; // M in milliseconds
 const SMOOTHING_WINDOW = 12; // moving average of last K gaze points
+const DELAY_PER_TRIGGER_MS = 2000; // Delay in milliseconds after button trigger
 
 interface VoiceButton {
   id: string;
@@ -71,9 +73,15 @@ const VoiceSession: React.FC = () => {
     color: "#3B82F6",
   });
   const [isScreenLocked, setIsScreenLocked] = useState(false);
+  const [isInDelayPhase, setIsInDelayPhase] = useState(false);
+  const [delayProgress, setDelayProgress] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const gazeContainerRef = useRef<HTMLDivElement>(null);
+  const delayTimeoutRef = useRef<number | null>(null);
+  const delayStartTimeRef = useRef<number | null>(null);
+  const delayProgressIntervalRef = useRef<number | null>(null);
+  const isInDelayPhaseRef = useRef<boolean>(false);
 
   const { gazeData, sendMessage, isConnected } = useWebSocket(
     "ws://localhost:9001/mapping"
@@ -249,12 +257,14 @@ const VoiceSession: React.FC = () => {
 
   // Text-to-speech fallback
   const speakText = useCallback((text: string) => {
-    if ("speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "id-ID";
-      utterance.rate = 0.8;
-      speechSynthesis.speak(utterance);
-    }
+    speak(text);
+    // Unused TTS fallback removed for brevity
+    // if ("speechSynthesis" in window) {
+    //   const utterance = new SpeechSynthesisUtterance(text);
+    //   utterance.lang = "id-ID";
+    //   utterance.rate = 0.8;
+    //   speechSynthesis.speak(utterance);
+    // }
   }, []);
 
   // Trigger button action
@@ -306,6 +316,45 @@ const VoiceSession: React.FC = () => {
           gazePoint: gazePoint,
         },
       });
+
+      // Start delay phase - ignore gaze during this period
+      setIsInDelayPhase(true);
+      isInDelayPhaseRef.current = true;
+      setDelayProgress(0);
+      delayStartTimeRef.current = Date.now();
+
+      // Clear any existing timeout and interval
+      if (delayTimeoutRef.current) {
+        clearTimeout(delayTimeoutRef.current);
+      }
+      if (delayProgressIntervalRef.current) {
+        clearInterval(delayProgressIntervalRef.current);
+      }
+
+      // Update delay progress for visual indicator
+      delayProgressIntervalRef.current = window.setInterval(() => {
+        if (delayStartTimeRef.current) {
+          const elapsed = Date.now() - delayStartTimeRef.current;
+          const progress = Math.min(
+            100,
+            (elapsed / DELAY_PER_TRIGGER_MS) * 100
+          );
+          setDelayProgress(progress);
+        }
+      }, 50); // Update every 50ms for smooth animation
+
+      // Set timeout to end delay phase
+      delayTimeoutRef.current = window.setTimeout(() => {
+        setIsInDelayPhase(false);
+        isInDelayPhaseRef.current = false;
+        setDelayProgress(0);
+        delayStartTimeRef.current = null;
+        delayTimeoutRef.current = null;
+        if (delayProgressIntervalRef.current) {
+          clearInterval(delayProgressIntervalRef.current);
+          delayProgressIntervalRef.current = null;
+        }
+      }, DELAY_PER_TRIGGER_MS);
     },
     [sendMessage, gazePoint, incrementUsage, speakText, showToast]
   );
@@ -373,6 +422,19 @@ const VoiceSession: React.FC = () => {
       consecutiveInsideRef.current = 0;
       setActiveButton(null);
       setDwellProgress(0);
+      setIsInDelayPhase(false);
+      isInDelayPhaseRef.current = false;
+      setDelayProgress(0);
+      // Clear delay timeout and interval if session stops
+      if (delayTimeoutRef.current) {
+        clearTimeout(delayTimeoutRef.current);
+        delayTimeoutRef.current = null;
+      }
+      if (delayProgressIntervalRef.current) {
+        clearInterval(delayProgressIntervalRef.current);
+        delayProgressIntervalRef.current = null;
+      }
+      delayStartTimeRef.current = null;
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
@@ -400,6 +462,19 @@ const VoiceSession: React.FC = () => {
       // Determine candidate button under current gaze
       const candidate = findButtonAtPoint(currentGaze.x, currentGaze.y);
       const currentTrackingId = trackingButtonIdRef.current;
+
+      // During delay phase, ignore gaze on buttons (except lock button)
+      if (isInDelayPhaseRef.current && candidate?.type !== "lock") {
+        // Reset tracking state but don't process gaze (unless it's lock button)
+        if (currentTrackingId !== candidate?.id) {
+          trackingButtonIdRef.current = null;
+          windowBufferRef.current = [];
+          consecutiveInsideRef.current = 0;
+          setActiveButton(null);
+          setDwellProgress(0);
+        }
+        return;
+      }
 
       // Handle transitions between buttons or no button
       if ((candidate?.id || null) !== currentTrackingId) {
@@ -472,6 +547,9 @@ const VoiceSession: React.FC = () => {
     return () => {
       if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
+      // Note: We do NOT clear delay timeout/interval here because:
+      // 1. The delay timeout should persist even if the effect re-runs
+      // 2. Delay cleanup is handled when session stops or component unmounts
     };
   }, [
     isSessionActive,
@@ -577,6 +655,21 @@ const VoiceSession: React.FC = () => {
       }
     };
     checkStatus();
+  }, []);
+
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup delay timeout and interval on unmount
+      if (delayTimeoutRef.current) {
+        clearTimeout(delayTimeoutRef.current);
+        delayTimeoutRef.current = null;
+      }
+      if (delayProgressIntervalRef.current) {
+        clearInterval(delayProgressIntervalRef.current);
+        delayProgressIntervalRef.current = null;
+      }
+    };
   }, []);
 
   // Session control functions
@@ -832,12 +925,25 @@ const VoiceSession: React.FC = () => {
               </div>
 
               {/* Dwell Progress Indicator */}
-              {activeButton === button.id && (
+              {activeButton === button.id && !isInDelayPhase && (
                 <div
                   className="dwell-progress"
                   style={{
                     width: `${dwellProgress}%`,
                     backgroundColor: button.color,
+                  }}
+                />
+              )}
+
+              {/* Delay Phase Indicator */}
+              {isInDelayPhase && (
+                <div
+                  className="delay-indicator"
+                  style={{
+                    transform: `translate(-50%, -50%) scale(${
+                      1 - delayProgress / 100
+                    })`,
+                    backgroundColor: "rgba(255, 255, 255, 0.3)",
                   }}
                 />
               )}
