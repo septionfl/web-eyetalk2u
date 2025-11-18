@@ -59,24 +59,23 @@ const VoiceSession: React.FC = () => {
 
   const getColorByCategory = (category: string): string => {
     const colorMap: { [key: string]: string } = {
-      'kebutuhan_dasar': '#3B82F6', // Blue
-      'medis': '#EF4444',           // Red
-      'kenyamanan': '#10B981',      // Green
-      'bantuan': '#F59E0B',         // Yellow
-      'emergency': '#DC2626'        // Dark Red
+      'kebutuhan_dasar': '#3B82F6',
+      'medis': '#EF4444',
+      'kenyamanan': '#10B981',
+      'bantuan': '#F59E0B',
+      'emergency': '#DC2626'
     };
     
-    return colorMap[category] || '#6B7280'; // Gray default
+    return colorMap[category] || '#6B7280';
   };
 
   const voiceButtons: VoiceButton[] = phrases.map((phrase, index) => {
-    // Position buttons in a grid
     const positions = [
-      { x: 25, y: 25 }, // Top-left
-      { x: 75, y: 25 }, // Top-right
-      { x: 50, y: 50 },  // Center
-      { x: 25, y: 75 }, // Bottom-left
-      { x: 75, y: 75 }  // Bottom-right
+      { x: 25, y: 25 },
+      { x: 75, y: 25 },
+      { x: 50, y: 50 },
+      { x: 25, y: 75 },
+      { x: 75, y: 75 }
     ];
     
     const position = positions[index % positions.length];
@@ -84,7 +83,7 @@ const VoiceSession: React.FC = () => {
     return {
       id: phrase.id,
       label: phrase.text,
-      audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`, // Fallback URL
+      audioUrl: phrase.audioUrl || `/audio/${phrase.id}.wav`,
       centerX: position.x,
       centerY: position.y,
       radius: 12,
@@ -92,83 +91,6 @@ const VoiceSession: React.FC = () => {
       dwellTime: 2000
     };
   });
-
-  // Handle WebSocket messages
-  useEffect(() => {
-    if (gazeData && isSessionActive) {
-      console.log('WebSocket message received:', gazeData);
-      
-      switch (gazeData.type) {
-        case 'gaze_data':
-          const { x, y, timestamp } = gazeData.data;
-          const normalizedX = Math.max(0, Math.min(100, x));
-          const normalizedY = Math.max(0, Math.min(100, y));
-          
-          setGazePoint({ x: normalizedX, y: normalizedY, timestamp });
-          checkGazeInButtons(normalizedX, normalizedY);
-          setUseMouseSimulation(false);
-          break;
-          
-        case 'calibration_complete':
-          console.log('Calibration completed');
-          break;
-          
-        default:
-          break;
-      }
-    }
-  }, [gazeData, isSessionActive]);
-
-  // Mouse simulation for development
-  useEffect(() => {
-    if (!isSessionActive || !useMouseSimulation) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const container = document.getElementById('gaze-container');
-      if (!container) return;
-
-      const rect = container.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
-      
-      setGazePoint({ x, y, timestamp: Date.now() });
-      checkGazeInButtons(x, y);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, [isSessionActive, useMouseSimulation]);
-
-  // Full screen handling
-  useEffect(() => {
-    const handleFullScreenChange = () => {
-      setIsFullScreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullScreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullScreenChange);
-    };
-  }, []);
-
-  const toggleFullScreen = useCallback(() => {
-    if (!gazeContainerRef.current) return;
-
-    if (!document.fullscreenElement) {
-      gazeContainerRef.current.requestFullscreen().then(() => {
-        setIsFullScreen(true);
-      }).catch(err => {
-        console.error('Error enabling full-screen:', err);
-      });
-    } else {
-      document.exitFullscreen().then(() => {
-        setIsFullScreen(false);
-      });
-    }
-  }, []);
 
   // Clear all timers
   const clearAllTimers = useCallback(() => {
@@ -181,6 +103,43 @@ const VoiceSession: React.FC = () => {
       progressTimerRef.current = null;
     }
   }, []);
+
+  // Hide cursor completely during session
+  const hideCursor = useCallback(() => {
+    if (isSessionActive) {
+      // Hide cursor on the entire document
+      document.body.style.cursor = 'none';
+      
+      // Also hide cursor specifically on gaze container and voice buttons
+      const container = gazeContainerRef.current;
+      if (container) {
+        container.style.cursor = 'none';
+        
+        // Hide cursor on all voice buttons
+        const voiceButtonElements = container.querySelectorAll('.voice-button');
+        voiceButtonElements.forEach(button => {
+          (button as HTMLElement).style.cursor = 'none';
+        });
+      }
+    }
+  }, [isSessionActive]);
+
+  // Show cursor temporarily (for controls)
+  const showCursorTemporarily = useCallback(() => {
+    document.body.style.cursor = 'default';
+    
+    const container = gazeContainerRef.current;
+    if (container) {
+      container.style.cursor = 'default';
+    }
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      if (isSessionActive) {
+        hideCursor();
+      }
+    }, 2000);
+  }, [isSessionActive, hideCursor]);
 
   // Check if gaze is inside any button
   const checkGazeInButtons = useCallback((x: number, y: number) => {
@@ -240,7 +199,6 @@ const VoiceSession: React.FC = () => {
     console.log(`Triggering button: ${button.label}`);
     setLastPlayedAudio(button.label);
     
-    // Increment usage count
     incrementUsage(button.id);
     
     if (audioRef.current) {
@@ -274,10 +232,125 @@ const VoiceSession: React.FC = () => {
     }
   }, []);
 
+  // Handle WebSocket messages
+  useEffect(() => {
+    if (gazeData && isSessionActive && !useMouseSimulation) {
+      console.log('WebSocket message received:', gazeData);
+      
+      switch (gazeData.type) {
+        case 'gaze_data':
+          const { x, y, timestamp } = gazeData.data;
+          const normalizedX = Math.max(0, Math.min(100, x));
+          const normalizedY = Math.max(0, Math.min(100, y));
+          
+          setGazePoint({ x: normalizedX, y: normalizedY, timestamp });
+          checkGazeInButtons(normalizedX, normalizedY);
+          break;
+          
+        case 'calibration_complete':
+          console.log('Calibration completed');
+          break;
+          
+        default:
+          break;
+      }
+    }
+  }, [gazeData, isSessionActive, useMouseSimulation, checkGazeInButtons]);
+
+  // Mouse simulation for development
+  useEffect(() => {
+    if (!isSessionActive || !useMouseSimulation) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const container = gazeContainerRef.current;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      
+      setGazePoint({ x, y, timestamp: Date.now() });
+      checkGazeInButtons(x, y);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [isSessionActive, useMouseSimulation, checkGazeInButtons]);
+
+  // Cursor management effect
+  useEffect(() => {
+    if (isSessionActive) {
+      // Hide cursor when session starts
+      hideCursor();
+      
+      // Add global mouse move listener to ensure cursor stays hidden
+      const handleGlobalMouseMove = () => {
+        hideCursor();
+      };
+      
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleGlobalMouseMove);
+        // Restore cursor when session ends
+        document.body.style.cursor = 'default';
+        
+        const container = gazeContainerRef.current;
+        if (container) {
+          container.style.cursor = 'default';
+          
+          // Restore cursor on voice buttons
+          const voiceButtonElements = container.querySelectorAll('.voice-button');
+          voiceButtonElements.forEach(button => {
+            (button as HTMLElement).style.cursor = 'pointer';
+          });
+        }
+      };
+    } else {
+      // Ensure cursor is visible when session is not active
+      document.body.style.cursor = 'default';
+      
+      const container = gazeContainerRef.current;
+      if (container) {
+        container.style.cursor = 'default';
+      }
+    }
+  }, [isSessionActive, hideCursor]);
+
+  // Full screen handling
+  useEffect(() => {
+    const handleFullScreenChange = () => {
+      setIsFullScreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullScreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullScreenChange);
+    };
+  }, []);
+
+  const toggleFullScreen = useCallback(() => {
+    if (!gazeContainerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      gazeContainerRef.current.requestFullscreen().then(() => {
+        setIsFullScreen(true);
+      }).catch(err => {
+        console.error('Error enabling full-screen:', err);
+      });
+    } else {
+      document.exitFullscreen().then(() => {
+        setIsFullScreen(false);
+      });
+    }
+  }, []);
+
   // Session control functions
   const startSession = () => {
     setIsSessionActive(true);
-    setUseMouseSimulation(true);
     
     sendMessage({ 
       type: 'start_voice_session',
@@ -323,7 +396,7 @@ const VoiceSession: React.FC = () => {
 
     addPhrase({
       text: newButtonConfig.label,
-      category: 'kebutuhan_dasar', // Default category
+      category: 'kebutuhan_dasar',
       usageCount: 0,
       lastUsed: null,
       audioUrl: `/audio/${newButtonConfig.label.toLowerCase().replace(/\s+/g, '_')}.wav`
@@ -373,7 +446,6 @@ const VoiceSession: React.FC = () => {
       {/* Header - Hidden in fullscreen */}
       {!isFullScreen && (
         <div className="session-header">
-                    
           <div className="session-controls">
             <div className="connection-status">
               <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`} />
@@ -384,6 +456,7 @@ const VoiceSession: React.FC = () => {
               onClick={toggleInputMode}
               className="control-btn secondary"
               title={useMouseSimulation ? 'Using Mouse Simulation' : 'Using WebSocket Data'}
+              onMouseEnter={showCursorTemporarily}
             >
               <Eye size={16} />
               {useMouseSimulation ? 'Mouse Mode' : 'WebSocket Mode'}
@@ -392,6 +465,7 @@ const VoiceSession: React.FC = () => {
             <button
               onClick={() => setShowSettings(!showSettings)}
               className="control-btn secondary"
+              onMouseEnter={showCursorTemporarily}
             >
               <Settings size={16} />
               Settings
@@ -400,6 +474,7 @@ const VoiceSession: React.FC = () => {
             <button
               onClick={toggleFullScreen}
               className="control-btn secondary"
+              onMouseEnter={showCursorTemporarily}
             >
               <Maximize2 size={16} />
               Full Screen
@@ -408,6 +483,7 @@ const VoiceSession: React.FC = () => {
             <button
               onClick={isSessionActive ? stopSession : startSession}
               className={`control-btn ${isSessionActive ? 'stop' : 'start'}`}
+              onMouseEnter={showCursorTemporarily}
             >
               {isSessionActive ? <Square size={20} /> : <Play size={20} />}
               {isSessionActive ? 'Stop Session' : 'Start Session'}
@@ -417,6 +493,7 @@ const VoiceSession: React.FC = () => {
               onClick={startCalibration}
               disabled={!isConnected}
               className="control-btn secondary"
+              onMouseEnter={showCursorTemporarily}
             >
               <RotateCcw size={20} />
               Calibrate
@@ -428,13 +505,16 @@ const VoiceSession: React.FC = () => {
       <div className="session-content">
         {/* Main Gaze Container */}
         <div 
-          className="gaze-container" 
+          className={`gaze-container ${isSessionActive ? 'session-active' : ''}`}
           id="gaze-container"
           ref={gazeContainerRef}
         >
           {/* Full Screen Controls */}
           {isFullScreen && (
-            <div className="fullscreen-controls">
+            <div 
+              className="fullscreen-controls"
+              onMouseEnter={showCursorTemporarily}
+            >
               <button 
                 className="control-btn secondary"
                 onClick={toggleFullScreen}
@@ -519,27 +599,27 @@ const VoiceSession: React.FC = () => {
             <div className="panel-section">
               <h3>Manage Voice Buttons</h3>
               
-            {/* Add New Button Form */}
-            <div className="add-button-form">
-              <h4>Change Button</h4>
-              <div className="form-row">
-                <input
-                  type="text"
-                  placeholder="Button Label"
-                  value={newButtonConfig.label}
-                  onChange={(e) => setNewButtonConfig(prev => ({ ...prev, label: e.target.value }))}
-                />
-                <input
-                  type="color"
-                  value={newButtonConfig.color}
-                  onChange={(e) => setNewButtonConfig(prev => ({ ...prev, color: e.target.value }))}
-                />
+              {/* Add New Button Form */}
+              <div className="add-button-form">
+                <h4>Add New Button</h4>
+                <div className="form-row">
+                  <input
+                    type="text"
+                    placeholder="Button Label"
+                    value={newButtonConfig.label}
+                    onChange={(e) => setNewButtonConfig(prev => ({ ...prev, label: e.target.value }))}
+                  />
+                  <input
+                    type="color"
+                    value={newButtonConfig.color}
+                    onChange={(e) => setNewButtonConfig(prev => ({ ...prev, color: e.target.value }))}
+                  />
+                </div>
+                <button onClick={handleAddButton} className="btn primary">
+                  <Plus size={16} />
+                  Add Button
+                </button>
               </div>
-              <button onClick={handleAddButton} className="btn primary">
-                <Plus size={16} />
-                Add Button
-              </button>
-            </div>
 
               {/* Existing Buttons List */}
               <div className="buttons-list">
@@ -585,7 +665,7 @@ const VoiceSession: React.FC = () => {
         {!showSettings && !isFullScreen && (
           <div className="info-panel">
             <div className="panel-section">
-              <h3>Status Session</h3>
+              <h3>Session Status</h3>
               <div className="status-grid">
                 <div className="status-item">
                   <span className="label">Status:</span>
